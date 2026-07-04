@@ -110,6 +110,9 @@ curl "https://<your-deployment>/api/pipeline/run?secret=$CRON_SECRET"
 
 Then check `/dashboard` for the result.
 
+Note: `/api/pipeline/run` is a no-op until `PIPELINE_ENABLED=true` is set —
+see below.
+
 ## Etsy AI-disclosure caveat
 
 Etsy's "made with AI" checkbox is a listing-editor-only UI toggle — there is
@@ -155,6 +158,7 @@ you need to set in Vercel:
 | `DATABASE_URL` | Neon Postgres connection string |
 | `LISTINGS_PER_DAY` | How many designs to generate per cron run (default 1) |
 | `CRON_SECRET` | Shared secret required to call `/api/pipeline/run` |
+| `PIPELINE_ENABLED` | Must be `true` for the run route to do anything; keep `false` until Etsy/Printify are configured |
 | `ANTHROPIC_API_KEY` | Claude API |
 | `CLAUDE_MODEL` | Defaults to `claude-sonnet-4-6` |
 | `RECRAFT_API_KEY` | Recraft image generation |

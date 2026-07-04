@@ -34,6 +34,17 @@ async function handle(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Publishing needs Etsy + Printify credentials. Until those are set,
+  // PIPELINE_ENABLED stays unset/false so the daily cron doesn't spend
+  // Claude/Recraft/Replicate credits generating art with nowhere to publish.
+  // Flip PIPELINE_ENABLED=true once ETSY_* and PRINTIFY_* are configured.
+  if (process.env.PIPELINE_ENABLED !== "true") {
+    return NextResponse.json({
+      skipped: true,
+      reason: "PIPELINE_ENABLED is not set to 'true'. Set it in Vercel env vars once Etsy/Printify credentials are configured.",
+    });
+  }
+
   const listingsPerDay = getEnvInt("LISTINGS_PER_DAY", 1);
   const batchId = await createBatch(listingsPerDay);
 
