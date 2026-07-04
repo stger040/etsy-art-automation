@@ -70,10 +70,29 @@ var — this project does not automate account/app creation:
 - **Anthropic (Claude)** — API key from console.anthropic.com.
 - **Recraft** — API key from your Recraft account.
 - **Replicate** — API token from replicate.com.
-- **Canva Connect** — create a Connect API integration, complete the OAuth
-  consent flow once to get a refresh token, and have a brand template ready
-  for the mockup (`CANVA_MOCKUP_TEMPLATE_ID`). Confirm its autofill image
-  field name matches `CANVA_IMAGE_FIELD_NAME`.
+- **Canva Connect** — create a Connect API integration at
+  canva.com/developers ("Your integrations"). Keep it as a **Draft**
+  integration — do not "Submit for review", that's only for integrations
+  published to all Canva users on the Marketplace. Steps:
+  1. **Scopes**: enable Write for `asset` and `design:content` only; leave
+     every other scope's Write off (Read can stay as-is).
+  2. **Authentication**: add redirect URL
+     `https://etsy-art-automation.vercel.app/api/canva/callback`.
+  3. Click **"Register for access"** under Data autofill APIs — the pipeline
+     calls this API directly, and Canva's approval can take a little time.
+  4. Leave "Return navigation" off (nothing to return from — this is
+     backend-only automation, no interactive Canva UI use).
+  5. Set `CANVA_CLIENT_ID` and `CANVA_CLIENT_SECRET` in Vercel from the
+     integration's Configuration page, and `CRON_SECRET` (see below), then
+     redeploy.
+  6. Visit `https://etsy-art-automation.vercel.app/api/canva/authorize?secret=$CRON_SECRET`
+     in a browser while logged into the Canva account you want the pipeline
+     to use, approve, and the callback page will hand you a refresh token —
+     copy it into `CANVA_REFRESH_TOKEN` in Vercel and redeploy. (This
+     handles the PKCE code exchange for you; see
+     `app/api/canva/authorize` and `app/api/canva/callback`.)
+  7. Have a brand template ready for the mockup (`CANVA_MOCKUP_TEMPLATE_ID`).
+     Confirm its autofill image field name matches `CANVA_IMAGE_FIELD_NAME`.
 - **Etsy Open API v3** — register an app, complete OAuth once yourself to get
   an access/refresh token pair. Refresh tokens rotate on every use; this app
   persists the current pair in the `oauth_tokens` Postgres table after first
