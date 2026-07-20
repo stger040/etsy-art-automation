@@ -42,6 +42,7 @@ async function createProduct(params: {
   printProviderId: number;
   imageId: string;
   priceCents: number;
+  imageScale?: number;
 }): Promise<string> {
   const shopId = requireEnv("PRINTIFY_SHOP_ID");
   const variantIds = await getAllVariantIds(params.blueprintId, params.printProviderId);
@@ -61,7 +62,7 @@ async function createProduct(params: {
           placeholders: [
             {
               position: "front",
-              images: [{ id: params.imageId, x: 0.5, y: 0.5, scale: 1, angle: 0 }],
+              images: [{ id: params.imageId, x: 0.5, y: 0.5, scale: params.imageScale ?? 1, angle: 0 }],
             },
           ],
         },
@@ -85,31 +86,58 @@ async function publishProduct(productId: string): Promise<void> {
   });
 }
 
+type BlueprintConfig = {
+  label: string;
+  blueprintId: number;
+  printProviderId: number;
+  priceCents: number;
+  imageScale?: number;
+};
+
 /**
  * Creates and publishes a poster product and a canvas product from the same
  * upscaled image, each with every catalog size variant enabled. Both publish
  * through Printify's native Etsy sales channel integration.
+ *
+ * A t-shirt product is included too if PRINTIFY_SHIRT_BLUEPRINT_ID is set —
+ * left opt-in because apparel print areas are proportioned very differently
+ * from a 4500x6000 poster image (a full-bleed scale=1 placement that looks
+ * right on a poster will usually overflow a shirt's print area). Check the
+ * first shirt product's preview in the Printify dashboard and tune
+ * PRINTIFY_SHIRT_IMAGE_SCALE if the art is cropped too tight or too small.
  */
 export async function createAndPublishPodProducts(
   listing: GeneratedListing,
   imageUrl: string,
   runId: string
 ): Promise<{ productIds: string[] }> {
-  const priceCents = getEnvInt("PRINTIFY_DEFAULT_PRICE_CENTS", 4500);
+  const defaultPriceCents = getEnvInt("PRINTIFY_DEFAULT_PRICE_CENTS", 4500);
   const imageId = await uploadImage(imageUrl, `pipeline-run-${runId}.png`);
 
-  const blueprints = [
+  const blueprints: BlueprintConfig[] = [
     {
       label: "poster",
       blueprintId: getEnvInt("PRINTIFY_POSTER_BLUEPRINT_ID", 97),
       printProviderId: getEnvInt("PRINTIFY_POSTER_PRINT_PROVIDER_ID", 1),
+      priceCents: defaultPriceCents,
     },
     {
       label: "canvas",
       blueprintId: getEnvInt("PRINTIFY_CANVAS_BLUEPRINT_ID", 196),
       printProviderId: getEnvInt("PRINTIFY_CANVAS_PRINT_PROVIDER_ID", 1),
+      priceCents: defaultPriceCents,
     },
   ];
+
+  if (process.env.PRINTIFY_SHIRT_BLUEPRINT_ID) {
+    blueprints.push({
+      label: "shirt",
+      blueprintId: getEnvInt("PRINTIFY_SHIRT_BLUEPRINT_ID", 0),
+      printProviderId: getEnvInt("PRINTIFY_SHIRT_PRINT_PROVIDER_ID", 1),
+      priceCents: getEnvInt("PRINTIFY_SHIRT_PRICE_CENTS", defaultPriceCents),
+      imageScale: Number(process.env.PRINTIFY_SHIRT_IMAGE_SCALE) || 0.8,
+    });
+  }
 
   const productIds: string[] = [];
   for (const bp of blueprints) {
@@ -120,7 +148,8 @@ export async function createAndPublishPodProducts(
       blueprintId: bp.blueprintId,
       printProviderId: bp.printProviderId,
       imageId,
-      priceCents,
+      priceCents: bp.priceCents,
+      imageScale: bp.imageScale,
     });
     await publishProduct(productId);
     productIds.push(productId);

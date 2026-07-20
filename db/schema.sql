@@ -113,11 +113,21 @@ create index if not exists idx_pipeline_step_errors_run_id on pipeline_step_erro
 
 -- Seed a starter niche list. Edit/add rows directly in Postgres to configure
 -- what the pipeline rotates through; `active=false` rows are skipped.
+--
+-- Picked from actual Etsy search-volume/trend data (abstract ~90k/mo searches,
+-- botanical ~40k/mo, boho/southwestern/celestial as named 2026 trend picks) —
+-- see the design rationale in the project README. All of these are
+-- deliberately text-free (AI image models render legible text unreliably,
+-- and Etsy's popular quote-print niche depends on it) and apparel-friendly,
+-- so the same generated art works for both the digital listing and Printify
+-- posters/canvases/shirts.
 insert into niches (name, description, prompt_style) values
-  ('Botanical line art', 'Minimalist single-line botanical illustrations', 'fine continuous-line art, botanical, minimalist, neutral background'),
-  ('Abstract geometric', 'Bold abstract geometric shapes and color blocking', 'bold abstract geometric composition, modern color blocking'),
-  ('Vintage travel poster', 'Retro mid-century travel poster art', 'vintage mid-century travel poster style, muted retro palette'),
-  ('Celestial/astrology', 'Moon phases, constellations, celestial motifs', 'celestial line art, moon phases, constellations, gold and navy palette'),
-  ('Coastal watercolor', 'Soft watercolor coastal and nautical scenes', 'loose watercolor painting, coastal scene, soft pastel palette'),
-  ('Cottagecore floral', 'Whimsical cottagecore floral patterns', 'whimsical cottagecore floral illustration, soft warm palette')
+  ('Abstract geometric', 'Bold abstract geometric shapes and color blocking', 'bold abstract geometric composition, modern color blocking, no text'),
+  ('Neutral abstract shapes', 'Soft organic abstract shapes in neutral tones for boho/minimalist decor', 'soft organic abstract shapes, neutral beige/terracotta/cream palette, boho minimalist, no text'),
+  ('Botanical line art', 'Minimalist single-line botanical illustrations', 'fine continuous-line art, botanical, minimalist, neutral background, no text'),
+  ('Modern botanical black and white', 'High-contrast black and white botanical illustration', 'high-contrast black and white botanical illustration, bold modern linework, no text'),
+  ('Boho mountain landscape', 'Minimalist boho-style mountain and desert landscape', 'minimalist boho mountain landscape, sun motif, muted earth-tone palette, no text'),
+  ('Southwestern desert illustration', 'Southwestern desert motifs — cacti, terracotta, sun', 'southwestern desert illustration, cacti and mesa shapes, terracotta and sand palette, no text'),
+  ('Celestial minimalist line art', 'Moon phases and constellations in a minimalist line-art style', 'minimalist celestial line art, moon phases, constellations, gold and neutral palette, no text'),
+  ('Coastal minimalist line art', 'Coastal and nautical motifs in a clean minimalist line-art style', 'minimalist coastal line art, waves and shoreline, soft blue and sand palette, no text')
 on conflict (name) do nothing;

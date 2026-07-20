@@ -198,6 +198,23 @@ you need to set in Vercel:
 | `PRINTIFY_POSTER_BLUEPRINT_ID`, `PRINTIFY_POSTER_PRINT_PROVIDER_ID` | Poster product catalog IDs |
 | `PRINTIFY_CANVAS_BLUEPRINT_ID`, `PRINTIFY_CANVAS_PRINT_PROVIDER_ID` | Canvas product catalog IDs |
 | `PRINTIFY_DEFAULT_PRICE_CENTS` | Flat retail price applied to all variants |
+| `PRINTIFY_SHIRT_BLUEPRINT_ID`, `PRINTIFY_SHIRT_PRINT_PROVIDER_ID` | Optional — set to also create a t-shirt product per design |
+| `PRINTIFY_SHIRT_PRICE_CENTS`, `PRINTIFY_SHIRT_IMAGE_SCALE` | Shirt-specific price and art scale (tune after checking a preview — see `.env.example`) |
+
+## Why these niches
+
+`db/schema.sql` seeds the `niches` table with abstract, botanical, boho, southwestern,
+celestial, and coastal line-art styles — picked from actual Etsy search-volume
+data (abstract art ~90k/mo searches, botanical/nature prints ~40k/mo, the rest
+are named 2026 trend picks), not guesses. Two deliberate constraints applied
+when picking them: no text-heavy styles (e.g. quote prints, a huge Etsy niche)
+because AI image models render legible text unreliably, and no styles that
+lean on real brands/franchises/public figures, since those would just get
+rejected by the compliance check anyway. All of them work as wall art and as
+apparel prints, so the same generated design can feed both the digital
+listing and every Printify product. Edit the `niches` table directly in
+Postgres to add, remove, or deactivate (`active=false`) niches — `npm run
+seed:niches` lists/upserts rows.
 
 ## Notes
 
