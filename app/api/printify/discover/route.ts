@@ -13,6 +13,10 @@ export const dynamic = "force-dynamic";
  * Visit /api/printify/discover?secret=YOUR_CRON_SECRET&search=canvas
  * (search defaults to "canvas"; pass a different term to look up other
  * product types, e.g. search=poster or search=t-shirt).
+ *
+ * Add &blueprint=<id> to instead list every print provider's size variants
+ * for that one blueprint, so you can compare size coverage before picking a
+ * print_provider_id, e.g. /api/printify/discover?secret=...&blueprint=937
  */
 async function printifyFetch(path: string) {
   const res = await fetch(`https://api.printify.com/v1${path}`, {
@@ -31,8 +35,37 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const search = (url.searchParams.get("search") || "canvas").toLowerCase();
+  const blueprintParam = url.searchParams.get("blueprint");
 
   const lines: string[] = [];
+
+  if (blueprintParam) {
+    const blueprintId = Number(blueprintParam);
+    lines.push(`=== Size variants per print provider for blueprint_id=${blueprintId} ===`);
+    try {
+      const providers = (await printifyFetch(`/catalog/blueprints/${blueprintId}/print_providers.json`)) as Array<{
+        id: number;
+        title: string;
+      }>;
+      for (const p of providers) {
+        lines.push(`\nprint_provider_id=${p.id}  "${p.title}"`);
+        try {
+          const data = (await printifyFetch(
+            `/catalog/blueprints/${blueprintId}/print_providers/${p.id}/variants.json`
+          )) as { variants: Array<{ id: number; title: string }> };
+          for (const v of data.variants) {
+            lines.push(`    variant_id=${v.id}  "${v.title}"`);
+          }
+        } catch (err) {
+          lines.push(`    (failed to fetch variants: ${err instanceof Error ? err.message : String(err)})`);
+        }
+      }
+    } catch (err) {
+      lines.push(`Failed to fetch print providers: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    return new NextResponse(lines.join("\n"), { headers: { "content-type": "text/plain" } });
+  }
 
   try {
     const shops = (await printifyFetch("/shops.json")) as Array<{
