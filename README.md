@@ -178,6 +178,7 @@ you need to set in Vercel:
 | `LISTINGS_PER_DAY` | How many designs to generate per cron run (default 1) |
 | `CRON_SECRET` | Shared secret required to call `/api/pipeline/run` |
 | `PIPELINE_ENABLED` | Must be `true` for the run route to do anything; keep `false` until Etsy/Printify are configured |
+| `PIPELINE_ENABLE_DIGITAL`, `PIPELINE_ENABLE_PHYSICAL` | Which listing branch(es) to publish per design (both default `true`) |
 | `ANTHROPIC_API_KEY` | Claude API |
 | `CLAUDE_MODEL` | Defaults to `claude-sonnet-4-6` |
 | `RECRAFT_API_KEY` | Recraft image generation |
@@ -195,6 +196,7 @@ you need to set in Vercel:
 | `ETSY_DIGITAL_PRICE` | Digital listing price (default 8.00) |
 | `PRINTIFY_API_TOKEN` | Printify personal access token |
 | `PRINTIFY_SHOP_ID` | Printify shop id (connected to Etsy) |
+| `PRINTIFY_ENABLE_POSTER`, `PRINTIFY_ENABLE_CANVAS` | Which physical product type(s) to create (both default `true`) |
 | `PRINTIFY_POSTER_BLUEPRINT_ID`, `PRINTIFY_POSTER_PRINT_PROVIDER_ID` | Poster product catalog IDs |
 | `PRINTIFY_CANVAS_BLUEPRINT_ID`, `PRINTIFY_CANVAS_PRINT_PROVIDER_ID` | Canvas product catalog IDs |
 | `PRINTIFY_DEFAULT_PRICE_CENTS` | Flat retail price applied to all variants |

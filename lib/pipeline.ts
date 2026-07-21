@@ -1,4 +1,5 @@
 import { query } from "./db";
+import { getEnvBool } from "./env";
 import { runStep, logStepError } from "./logger";
 import { pickNextNiche } from "./niches";
 import { generateListing, checkImageCompliance } from "./claude";
@@ -117,43 +118,47 @@ export async function processOneRun(batchId: string): Promise<RunOutcome> {
   // --- f. Publish: digital (Canva + Etsy) and physical (Printify) branches ---
   const listingTypes: ListingTypes = [];
 
-  await setStatus(runId, "publishing_digital");
-  const mockup = await runStep("canva_mockup", ctx, () => createMockup(blobUrl, runId));
-  const listingImageUrl = mockup?.mockupUrl ?? blobUrl;
+  if (getEnvBool("PIPELINE_ENABLE_DIGITAL", true)) {
+    await setStatus(runId, "publishing_digital");
+    const mockup = await runStep("canva_mockup", ctx, () => createMockup(blobUrl, runId));
+    const listingImageUrl = mockup?.mockupUrl ?? blobUrl;
 
-  const etsyListing = await runStep("etsy_create_draft_listing", ctx, () => createDraftDigitalListing(listing));
-  if (etsyListing) {
-    await runStep("etsy_upload_digital_file", ctx, () =>
-      uploadDigitalFile(etsyListing.listingId, blobUrl, `${listing.theme.replace(/[^a-z0-9]+/gi, "-")}.png`)
-    );
-    await runStep("etsy_upload_listing_image", ctx, () => uploadListingImage(etsyListing.listingId, listingImageUrl));
-    await logStepError({
-      runId,
-      batchId,
-      step: "etsy_ai_disclosure_reminder",
-      error:
-        "Etsy Open API v3 has no documented field to set the 'made with AI' checkbox. " +
-        "A disclosure sentence was added to the listing description automatically, but you must " +
-        "manually check that box in the Etsy listing editor before activating this draft.",
-    });
-    listingTypes.push("digital");
-    await updateRun(runId, {
-      etsy_listing_id: etsyListing.listingId,
-      canva_design_id: mockup?.designId ?? null,
-      canva_mockup_url: mockup?.mockupUrl ?? null,
-    });
+    const etsyListing = await runStep("etsy_create_draft_listing", ctx, () => createDraftDigitalListing(listing));
+    if (etsyListing) {
+      await runStep("etsy_upload_digital_file", ctx, () =>
+        uploadDigitalFile(etsyListing.listingId, blobUrl, `${listing.theme.replace(/[^a-z0-9]+/gi, "-")}.png`)
+      );
+      await runStep("etsy_upload_listing_image", ctx, () => uploadListingImage(etsyListing.listingId, listingImageUrl));
+      await logStepError({
+        runId,
+        batchId,
+        step: "etsy_ai_disclosure_reminder",
+        error:
+          "Etsy Open API v3 has no documented field to set the 'made with AI' checkbox. " +
+          "A disclosure sentence was added to the listing description automatically, but you must " +
+          "manually check that box in the Etsy listing editor before activating this draft.",
+      });
+      listingTypes.push("digital");
+      await updateRun(runId, {
+        etsy_listing_id: etsyListing.listingId,
+        canva_design_id: mockup?.designId ?? null,
+        canva_mockup_url: mockup?.mockupUrl ?? null,
+      });
+    }
   }
 
-  await setStatus(runId, "publishing_physical");
-  const printify = await runStep("printify_create_and_publish", ctx, () =>
-    createAndPublishPodProducts(listing, blobUrl, runId)
-  );
-  if (printify) {
-    listingTypes.push("physical");
-    await updateRun(runId, {
-      printify_product_id: printify.productIds.join(","),
-      printify_publish_status: "published",
-    });
+  if (getEnvBool("PIPELINE_ENABLE_PHYSICAL", true)) {
+    await setStatus(runId, "publishing_physical");
+    const printify = await runStep("printify_create_and_publish", ctx, () =>
+      createAndPublishPodProducts(listing, blobUrl, runId)
+    );
+    if (printify) {
+      listingTypes.push("physical");
+      await updateRun(runId, {
+        printify_product_id: printify.productIds.join(","),
+        printify_publish_status: "published",
+      });
+    }
   }
 
   const outcome: RunOutcome = listingTypes.length > 0 ? "completed" : "failed";

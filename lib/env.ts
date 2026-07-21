@@ -22,3 +22,9 @@ export function getEnvInt(name: string, fallback: number): number {
   const parsed = parseInt(raw, 10);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
+
+export function getEnvBool(name: string, fallback: boolean): boolean {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") return fallback;
+  return raw === "true" || raw === "1";
+}

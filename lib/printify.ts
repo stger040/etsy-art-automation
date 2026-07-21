@@ -1,4 +1,4 @@
-import { getEnvInt, requireEnv } from "./env";
+import { getEnvBool, getEnvInt, requireEnv } from "./env";
 import type { GeneratedListing } from "./types";
 
 const API_BASE = "https://api.printify.com/v1";
@@ -95,9 +95,11 @@ type BlueprintConfig = {
 };
 
 /**
- * Creates and publishes a poster product and a canvas product from the same
- * upscaled image, each with every catalog size variant enabled. Both publish
- * through Printify's native Etsy sales channel integration.
+ * Creates and publishes a poster product and/or a canvas product from the
+ * same upscaled image (each gated behind PRINTIFY_ENABLE_POSTER /
+ * PRINTIFY_ENABLE_CANVAS, both default true), with every catalog size
+ * variant enabled. All publish through Printify's native Etsy sales channel
+ * integration.
  *
  * A t-shirt product is included too if PRINTIFY_SHIRT_BLUEPRINT_ID is set —
  * left opt-in because apparel print areas are proportioned very differently
@@ -114,20 +116,25 @@ export async function createAndPublishPodProducts(
   const defaultPriceCents = getEnvInt("PRINTIFY_DEFAULT_PRICE_CENTS", 4500);
   const imageId = await uploadImage(imageUrl, `pipeline-run-${runId}.png`);
 
-  const blueprints: BlueprintConfig[] = [
-    {
+  const blueprints: BlueprintConfig[] = [];
+
+  if (getEnvBool("PRINTIFY_ENABLE_POSTER", true)) {
+    blueprints.push({
       label: "poster",
       blueprintId: getEnvInt("PRINTIFY_POSTER_BLUEPRINT_ID", 97),
       printProviderId: getEnvInt("PRINTIFY_POSTER_PRINT_PROVIDER_ID", 1),
       priceCents: defaultPriceCents,
-    },
-    {
+    });
+  }
+
+  if (getEnvBool("PRINTIFY_ENABLE_CANVAS", true)) {
+    blueprints.push({
       label: "canvas",
       blueprintId: getEnvInt("PRINTIFY_CANVAS_BLUEPRINT_ID", 196),
       printProviderId: getEnvInt("PRINTIFY_CANVAS_PRINT_PROVIDER_ID", 1),
       priceCents: defaultPriceCents,
-    },
-  ];
+    });
+  }
 
   if (process.env.PRINTIFY_SHIRT_BLUEPRINT_ID) {
     blueprints.push({
