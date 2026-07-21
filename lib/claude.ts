@@ -109,7 +109,7 @@ export async function generateListing(niche: Niche): Promise<GeneratedListing> {
 
   const listing = extractToolInput<GeneratedListing>(response, "emit_listing");
 
-  // Defensive trimming in case the model drifts slightly outside limits.
+  // Defensive cleanup in case the model drifts slightly outside limits.
   // Tool-use schemas aren't always followed exactly — etsy_tags has been
   // observed coming back as a comma-separated string instead of an array
   // despite the array schema, so normalize before relying on array methods.
@@ -121,8 +121,13 @@ export async function generateListing(niche: Niche): Promise<GeneratedListing> {
         .map((t) => t.trim())
         .filter(Boolean);
 
-  listing.etsy_title = listing.etsy_title.slice(0, MAX_TITLE_LENGTH);
+  // Also seen: stray tool-call-looking fragments (e.g. "</etsy_description>",
+  // "</invoke>") bleeding into the end of free-text fields. Strip them.
+  const stripStrayTags = (text: string) => text.replace(/<\/?[a-z_]+>\s*/gi, "").trim();
+
+  listing.etsy_title = stripStrayTags(listing.etsy_title).slice(0, MAX_TITLE_LENGTH);
   listing.etsy_tags = tagsArray.slice(0, TAG_COUNT).map((t) => String(t).slice(0, MAX_TAG_LENGTH));
+  listing.etsy_description = stripStrayTags(listing.etsy_description);
   listing.image_prompt = listing.image_prompt.slice(0, MAX_IMAGE_PROMPT_LENGTH);
 
   return listing;

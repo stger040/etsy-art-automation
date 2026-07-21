@@ -80,7 +80,24 @@ export async function processOneRun(batchId: string): Promise<RunOutcome> {
     await setStatus(runId, "failed");
     return "failed";
   }
-  await updateRun(runId, { base_image_url: baseImage.url, status: "upscaling" });
+  await updateRun(runId, { base_image_url: baseImage.url, status: "compliance_check" });
+
+  // --- e. Claude vision compliance check (fail closed) ---
+  // Runs against the small pre-upscale image rather than the final ~4500x6000
+  // one: upscaling only changes resolution, not depicted content, so this is
+  // an equally valid check, and it avoids sending a multi-megabyte base64
+  // payload that trips Claude's request size limit. It also means a rejected
+  // design skips the Replicate upscale entirely, saving that cost.
+  const compliance = await runStep("compliance_check", ctx, () => checkImageCompliance(baseImage.url));
+  if (!compliance || !compliance.approved) {
+    await updateRun(runId, {
+      status: "rejected",
+      compliance_status: "rejected",
+      compliance_reason: compliance?.reason ?? "Compliance check could not be completed; rejecting to be safe.",
+    });
+    return "rejected";
+  }
+  await updateRun(runId, { compliance_status: "approved", compliance_reason: compliance.reason, status: "upscaling" });
 
   // --- c. Upscale via Replicate Real-ESRGAN ---
   const upscaled = await runStep("replicate_upscale", ctx, () => upscaleImage(baseImage.url));
@@ -101,19 +118,7 @@ export async function processOneRun(batchId: string): Promise<RunOutcome> {
     await setStatus(runId, "failed");
     return "failed";
   }
-  await updateRun(runId, { blob_url: blobUrl, status: "compliance_check" });
-
-  // --- e. Claude vision compliance check (fail closed) ---
-  const compliance = await runStep("compliance_check", ctx, () => checkImageCompliance(blobUrl));
-  if (!compliance || !compliance.approved) {
-    await updateRun(runId, {
-      status: "rejected",
-      compliance_status: "rejected",
-      compliance_reason: compliance?.reason ?? "Compliance check could not be completed; rejecting to be safe.",
-    });
-    return "rejected";
-  }
-  await updateRun(runId, { compliance_status: "approved", compliance_reason: compliance.reason });
+  await updateRun(runId, { blob_url: blobUrl });
 
   // --- f. Publish: digital (Canva + Etsy) and physical (Printify) branches ---
   const listingTypes: ListingTypes = [];
