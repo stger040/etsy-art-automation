@@ -5,6 +5,8 @@ const ANTHROPIC_VERSION = "2023-06-01";
 const MAX_TITLE_LENGTH = 140;
 const MAX_TAG_LENGTH = 20;
 const TAG_COUNT = 13;
+// Recraft's API rejects prompts over 1000 chars; stay under that with margin.
+const MAX_IMAGE_PROMPT_LENGTH = 900;
 
 function model(): string {
   return getEnv("CLAUDE_MODEL", "claude-sonnet-4-6");
@@ -66,8 +68,7 @@ export async function generateListing(niche: Niche): Promise<GeneratedListing> {
             theme: { type: "string", description: "Short internal name for this art concept." },
             image_prompt: {
               type: "string",
-              description:
-                "Detailed text-to-image generation prompt describing composition, subject, style, palette, and mood.",
+              description: `Detailed text-to-image generation prompt describing composition, subject, style, palette, and mood. At most ${MAX_IMAGE_PROMPT_LENGTH} characters — the image API this feeds into rejects longer prompts.`,
             },
             etsy_title: {
               type: "string",
@@ -100,7 +101,7 @@ export async function generateListing(niche: Niche): Promise<GeneratedListing> {
           `Requirements:\n` +
           `- etsy_title: <= ${MAX_TITLE_LENGTH} characters, keyword-rich, no clickbait.\n` +
           `- etsy_tags: exactly ${TAG_COUNT} tags, each <= ${MAX_TAG_LENGTH} characters, no duplicates.\n` +
-          `- image_prompt: specific enough for a text-to-image model to produce a print-ready piece of art.\n` +
+          `- image_prompt: <= ${MAX_IMAGE_PROMPT_LENGTH} characters, specific enough for a text-to-image model to produce a print-ready piece of art.\n` +
           `- The concept must be original — do not reference any real copyrighted character, logo, or brand.`,
       },
     ],
@@ -122,6 +123,7 @@ export async function generateListing(niche: Niche): Promise<GeneratedListing> {
 
   listing.etsy_title = listing.etsy_title.slice(0, MAX_TITLE_LENGTH);
   listing.etsy_tags = tagsArray.slice(0, TAG_COUNT).map((t) => String(t).slice(0, MAX_TAG_LENGTH));
+  listing.image_prompt = listing.image_prompt.slice(0, MAX_IMAGE_PROMPT_LENGTH);
 
   return listing;
 }
