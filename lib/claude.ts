@@ -109,8 +109,19 @@ export async function generateListing(niche: Niche): Promise<GeneratedListing> {
   const listing = extractToolInput<GeneratedListing>(response, "emit_listing");
 
   // Defensive trimming in case the model drifts slightly outside limits.
+  // Tool-use schemas aren't always followed exactly — etsy_tags has been
+  // observed coming back as a comma-separated string instead of an array
+  // despite the array schema, so normalize before relying on array methods.
+  const rawTags: unknown = listing.etsy_tags;
+  const tagsArray = Array.isArray(rawTags)
+    ? rawTags
+    : String(rawTags)
+        .split(/[,\n]/)
+        .map((t) => t.trim())
+        .filter(Boolean);
+
   listing.etsy_title = listing.etsy_title.slice(0, MAX_TITLE_LENGTH);
-  listing.etsy_tags = listing.etsy_tags.slice(0, TAG_COUNT).map((t) => t.slice(0, MAX_TAG_LENGTH));
+  listing.etsy_tags = tagsArray.slice(0, TAG_COUNT).map((t) => String(t).slice(0, MAX_TAG_LENGTH));
 
   return listing;
 }

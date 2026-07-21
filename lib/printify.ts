@@ -27,11 +27,51 @@ async function uploadImage(imageUrl: string, fileName: string): Promise<string> 
   return uploaded.id;
 }
 
-async function getAllVariantIds(blueprintId: number, printProviderId: number): Promise<number[]> {
+type Orientation = "vertical" | "horizontal" | "square";
+
+function imageOrientation(width: number, height: number): Orientation {
+  const ratio = width / height;
+  if (ratio > 1.05) return "horizontal";
+  if (ratio < 0.95) return "vertical";
+  return "square";
+}
+
+// Printify variant titles for size-per-orientation blueprints (posters,
+// canvases) are labeled like `16" x 20" (Vertical) / 0.75''` — no suffix
+// means a square size. Blueprints without orientation-labeled variants at
+// all (e.g. apparel, sized S/M/L instead) aren't filtered.
+function variantOrientation(title: string): Orientation {
+  if (/\(vertical\)/i.test(title)) return "vertical";
+  if (/\(horizontal\)/i.test(title)) return "horizontal";
+  return "square";
+}
+
+/**
+ * Picks the variant IDs matching the generated image's orientation, so a
+ * portrait design only enables portrait canvas/poster sizes instead of
+ * every size including ones that would badly crop or stretch it. Falls back
+ * to every variant if the blueprint has no orientation-labeled variants
+ * (apparel) or if filtering would otherwise leave nothing enabled.
+ */
+async function getMatchingVariantIds(
+  blueprintId: number,
+  printProviderId: number,
+  imageWidth: number,
+  imageHeight: number
+): Promise<number[]> {
   const data = (await printifyFetch(
     `/catalog/blueprints/${blueprintId}/print_providers/${printProviderId}/variants.json`
-  )) as { variants: Array<{ id: number }> };
-  return data.variants.map((v) => v.id);
+  )) as { variants: Array<{ id: number; title: string }> };
+
+  const hasOrientedVariants = data.variants.some((v) => /\((vertical|horizontal)\)/i.test(v.title));
+  if (!hasOrientedVariants) {
+    return data.variants.map((v) => v.id);
+  }
+
+  const targetOrientation = imageOrientation(imageWidth, imageHeight);
+  const matched = data.variants.filter((v) => variantOrientation(v.title) === targetOrientation);
+
+  return (matched.length > 0 ? matched : data.variants).map((v) => v.id);
 }
 
 async function createProduct(params: {
@@ -43,9 +83,16 @@ async function createProduct(params: {
   imageId: string;
   priceCents: number;
   imageScale?: number;
+  imageWidth: number;
+  imageHeight: number;
 }): Promise<string> {
   const shopId = requireEnv("PRINTIFY_SHOP_ID");
-  const variantIds = await getAllVariantIds(params.blueprintId, params.printProviderId);
+  const variantIds = await getMatchingVariantIds(
+    params.blueprintId,
+    params.printProviderId,
+    params.imageWidth,
+    params.imageHeight
+  );
 
   const product = (await printifyFetch(`/shops/${shopId}/products.json`, {
     method: "POST",
@@ -97,9 +144,11 @@ type BlueprintConfig = {
 /**
  * Creates and publishes a poster product and/or a canvas product from the
  * same upscaled image (each gated behind PRINTIFY_ENABLE_POSTER /
- * PRINTIFY_ENABLE_CANVAS, both default true), with every catalog size
- * variant enabled. All publish through Printify's native Etsy sales channel
- * integration.
+ * PRINTIFY_ENABLE_CANVAS, both default true). Only the size variants whose
+ * orientation (vertical/horizontal/square) matches the generated image are
+ * enabled — a portrait design won't get landscape or square sizes enabled,
+ * since those would crop or stretch it badly. All publish through Printify's
+ * native Etsy sales channel integration.
  *
  * A t-shirt product is included too if PRINTIFY_SHIRT_BLUEPRINT_ID is set —
  * left opt-in because apparel print areas are proportioned very differently
@@ -111,7 +160,9 @@ type BlueprintConfig = {
 export async function createAndPublishPodProducts(
   listing: GeneratedListing,
   imageUrl: string,
-  runId: string
+  runId: string,
+  imageWidth: number,
+  imageHeight: number
 ): Promise<{ productIds: string[] }> {
   const defaultPriceCents = getEnvInt("PRINTIFY_DEFAULT_PRICE_CENTS", 4500);
   const imageId = await uploadImage(imageUrl, `pipeline-run-${runId}.png`);
@@ -157,6 +208,8 @@ export async function createAndPublishPodProducts(
       imageId,
       priceCents: bp.priceCents,
       imageScale: bp.imageScale,
+      imageWidth,
+      imageHeight,
     });
     await publishProduct(productId);
     productIds.push(productId);

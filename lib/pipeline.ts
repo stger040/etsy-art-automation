@@ -150,7 +150,7 @@ export async function processOneRun(batchId: string): Promise<RunOutcome> {
   if (getEnvBool("PIPELINE_ENABLE_PHYSICAL", true)) {
     await setStatus(runId, "publishing_physical");
     const printify = await runStep("printify_create_and_publish", ctx, () =>
-      createAndPublishPodProducts(listing, blobUrl, runId)
+      createAndPublishPodProducts(listing, blobUrl, runId, upscaled.width, upscaled.height)
     );
     if (printify) {
       listingTypes.push("physical");

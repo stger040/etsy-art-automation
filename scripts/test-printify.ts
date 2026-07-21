@@ -18,7 +18,7 @@ async function main() {
     etsy_description: "This is a test product created by the pipeline's isolated Printify test script.",
   };
 
-  const { productIds } = await createAndPublishPodProducts(listing, imageUrl, `test-${Date.now()}`);
+  const { productIds } = await createAndPublishPodProducts(listing, imageUrl, `test-${Date.now()}`, 4500, 6000);
   console.log("Created + published product IDs:", productIds);
 }
 
