@@ -93,6 +93,13 @@ create table if not exists pipeline_runs (
   updated_at timestamptz not null default now()
 );
 
+-- Tracks whether a design that finished generation + compliance approval but
+-- failed to auto-publish anywhere has been handled through the manual
+-- fallback flow (/manual-queue) yet. Only meaningful when status='failed'
+-- and blob_url is set (i.e. the asset exists, publishing is what failed).
+alter table pipeline_runs add column if not exists manual_review_status text not null default 'pending'
+  check (manual_review_status in ('pending', 'published', 'skipped'));
+
 create index if not exists idx_pipeline_runs_batch_id on pipeline_runs(batch_id);
 create index if not exists idx_pipeline_runs_status on pipeline_runs(status);
 create index if not exists idx_pipeline_runs_created_at on pipeline_runs(created_at desc);

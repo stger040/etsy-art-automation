@@ -47,6 +47,7 @@ export type PipelineRun = {
   printify_publish_status: string | null;
   status: PipelineStatus;
   error_message: string | null;
+  manual_review_status: "pending" | "published" | "skipped";
   created_at: string;
   updated_at: string;
 };

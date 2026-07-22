@@ -32,6 +32,31 @@ Every external call is wrapped so a single failure (e.g. Printify down) is
 logged and skipped rather than crashing the whole run — see `lib/logger.ts`'s
 `runStep`.
 
+Note: the compliance check (e) now runs right after image generation (b),
+before the upscale — checking the small pre-upscale image is equally valid
+(upscaling doesn't change what's depicted) and avoids sending a huge base64
+payload that trips Claude's request size limit. A rejected design also skips
+the upscale entirely this way.
+
+## Manual publish fallback
+
+If a design finishes generation and passes the compliance check but fails to
+auto-publish anywhere (e.g. an external API is down), nothing is lost — the
+image and listing copy are already generated and stored. Visit
+**`/manual-queue`** to see those designs with the full-res image, one-click
+copy buttons for the title/tags/description, and a link to Printify's
+catalog, so you can create the listing by hand in under a minute. Mark it
+done there once you have, and it drops off the list.
+
+This requires `manual_review_status` on `pipeline_runs`, added by a schema
+change — if you already ran `db/schema.sql` once, re-run it (it's
+idempotent) or just run this one line in Neon's SQL editor:
+
+```sql
+alter table pipeline_runs add column if not exists manual_review_status text not null default 'pending'
+  check (manual_review_status in ('pending', 'published', 'skipped'));
+```
+
 ## Setup
 
 ### 1. Database (Neon Postgres)

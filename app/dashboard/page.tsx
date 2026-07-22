@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getRecentRunHistory } from "@/lib/status";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +37,12 @@ export default async function DashboardPage() {
       <h1>Pipeline Dashboard</h1>
       <p style={{ color: "#8b949e" }}>
         Raw JSON at <code>/api/pipeline/status</code>. Manually trigger a run at{" "}
-        <code>/api/pipeline/run?secret=YOUR_CRON_SECRET</code>.
+        <code>/api/pipeline/run?secret=YOUR_CRON_SECRET</code>. Designs that generated fine but failed to
+        auto-publish are in the{" "}
+        <Link href="/manual-queue" style={{ color: "#7db7ff" }}>
+          manual publish queue
+        </Link>
+        .
       </p>
 
       <h2>Recent batches</h2>
