@@ -14,7 +14,11 @@ async function printifyFetch(path: string, init: RequestInit = {}) {
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Printify API error ${res.status} on ${path}: ${text.slice(0, 500)}`);
+    const headerDump = Array.from(res.headers.entries())
+      .filter(([key]) => !["date", "content-length"].includes(key))
+      .map(([key, value]) => `${key}: ${value}`)
+      .join(" | ");
+    throw new Error(`Printify API error ${res.status} on ${path}: ${text.slice(0, 500)} [headers: ${headerDump}]`);
   }
   return res.json();
 }

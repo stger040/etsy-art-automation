@@ -17,10 +17,21 @@ export const dynamic = "force-dynamic";
  * Add &blueprint=<id> to instead list every print provider's size variants
  * for that one blueprint, so you can compare size coverage before picking a
  * print_provider_id, e.g. /api/printify/discover?secret=...&blueprint=937
+ *
+ * Add &testwrite=1 to diagnose a write-specific auth problem: POSTs a
+ * deliberately incomplete product body (missing required fields) to
+ * /shops/{PRINTIFY_SHOP_ID}/products.json and shows the raw response. A 400
+ * validation error back means the token/shop auth is fine for writes and
+ * only the real request body was the issue; a 401 here confirms it's a
+ * genuine write-permission problem unrelated to payload content.
  */
-async function printifyFetch(path: string) {
+async function printifyFetch(path: string, init: RequestInit = {}) {
   const res = await fetch(`https://api.printify.com/v1${path}`, {
-    headers: { authorization: `Bearer ${requireEnv("PRINTIFY_API_TOKEN")}` },
+    ...init,
+    headers: {
+      ...(init.headers || {}),
+      authorization: `Bearer ${requireEnv("PRINTIFY_API_TOKEN")}`,
+    },
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -36,8 +47,36 @@ export async function GET(request: Request) {
   }
   const search = (url.searchParams.get("search") || "canvas").toLowerCase();
   const blueprintParam = url.searchParams.get("blueprint");
+  const testWrite = url.searchParams.get("testwrite");
 
   const lines: string[] = [];
+
+  if (testWrite) {
+    const shopId = requireEnv("PRINTIFY_SHOP_ID");
+    lines.push(`=== Write-auth test: POST /shops/${shopId}/products.json (deliberately incomplete body) ===`);
+    const res = await fetch(`https://api.printify.com/v1/shops/${shopId}/products.json`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${requireEnv("PRINTIFY_API_TOKEN")}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({}),
+    });
+    const text = await res.text().catch(() => "");
+    lines.push(`status: ${res.status}`);
+    lines.push(`body: ${text.slice(0, 1000)}`);
+    lines.push("headers:");
+    for (const [key, value] of res.headers.entries()) {
+      if (!["date", "content-length"].includes(key)) lines.push(`  ${key}: ${value}`);
+    }
+    lines.push("");
+    lines.push(
+      res.status === 401
+        ? "-> 401 means this is a genuine write-permission problem, not the request body."
+        : "-> Not a 401, so auth for writes is working; the real pipeline failure has a different cause."
+    );
+    return new NextResponse(lines.join("\n"), { headers: { "content-type": "text/plain" } });
+  }
 
   if (blueprintParam) {
     const blueprintId = Number(blueprintParam);
