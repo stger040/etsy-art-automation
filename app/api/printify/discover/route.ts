@@ -53,14 +53,30 @@ export async function GET(request: Request) {
 
   if (testWrite) {
     const shopId = requireEnv("PRINTIFY_SHOP_ID");
-    lines.push(`=== Write-auth test: POST /shops/${shopId}/products.json (deliberately incomplete body) ===`);
+    const body =
+      testWrite === "full"
+        ? {
+            title: "Diagnostic test product (safe to ignore/delete)",
+            description: "Diagnostic test product",
+            blueprint_id: Number(process.env.PRINTIFY_CANVAS_BLUEPRINT_ID) || 937,
+            print_provider_id: Number(process.env.PRINTIFY_CANVAS_PRINT_PROVIDER_ID) || 99,
+            // Deliberately still missing variants/print_areas (both required)
+            // so this can't accidentally succeed and create a real product —
+            // it should 400 on validation if write auth is actually fine.
+          }
+        : {};
+    lines.push(
+      `=== Write-auth test: POST /shops/${shopId}/products.json (${
+        testWrite === "full" ? "fuller but still incomplete" : "empty"
+      } body) ===`
+    );
     const res = await fetch(`https://api.printify.com/v1/shops/${shopId}/products.json`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${requireEnv("PRINTIFY_API_TOKEN")}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify(body),
     });
     const text = await res.text().catch(() => "");
     lines.push(`status: ${res.status}`);
