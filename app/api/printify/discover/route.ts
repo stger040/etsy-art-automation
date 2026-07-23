@@ -24,6 +24,13 @@ export const dynamic = "force-dynamic";
  * validation error back means the token/shop auth is fine for writes and
  * only the real request body was the issue; a 401 here confirms it's a
  * genuine write-permission problem unrelated to payload content.
+ *
+ * Add &testwrite=real for a fully valid, production-shaped payload instead
+ * (real uploaded image, real variant IDs) — the exact request the pipeline
+ * itself would send, for handing to Printify support when they need "a
+ * properly formatted payload that still fails". NOTE: if auth happens to
+ * succeed this really does create a product (unpublished, not pushed to
+ * Etsy) — safe to delete from Printify afterwards either way.
  */
 async function printifyFetch(path: string, init: RequestInit = {}) {
   const res = await fetch(`https://api.printify.com/v1${path}`, {
@@ -50,6 +57,97 @@ export async function GET(request: Request) {
   const testWrite = url.searchParams.get("testwrite");
 
   const lines: string[] = [];
+
+  if (testWrite === "real") {
+    const shopId = requireEnv("PRINTIFY_SHOP_ID");
+    const token = requireEnv("PRINTIFY_API_TOKEN");
+    const blueprintId = Number(process.env.PRINTIFY_CANVAS_BLUEPRINT_ID) || 937;
+    const printProviderId = Number(process.env.PRINTIFY_CANVAS_PRINT_PROVIDER_ID) || 99;
+
+    lines.push(`=== Full production-shaped write test (blueprint ${blueprintId}, provider ${printProviderId}) ===`);
+
+    // 1. Upload a real test image, exactly like the pipeline does.
+    let imageId: string;
+    try {
+      const uploadRes = await fetch("https://api.printify.com/v1/uploads/images.json", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          file_name: "diagnostic-test.png",
+          url: "https://placehold.co/4500x6000.png?text=test",
+        }),
+      });
+      const uploadText = await uploadRes.text();
+      lines.push(`Image upload: status ${uploadRes.status}`);
+      if (!uploadRes.ok) {
+        lines.push(`Image upload body: ${uploadText.slice(0, 500)}`);
+        return new NextResponse(lines.join("\n"), { headers: { "content-type": "text/plain" } });
+      }
+      imageId = (JSON.parse(uploadText) as { id: string }).id;
+      lines.push(`Uploaded image id: ${imageId}`);
+    } catch (err) {
+      lines.push(`Image upload failed: ${err instanceof Error ? err.message : String(err)}`);
+      return new NextResponse(lines.join("\n"), { headers: { "content-type": "text/plain" } });
+    }
+
+    // 2. Fetch real variant IDs for the configured blueprint/provider.
+    let variantIds: number[];
+    try {
+      const variantsRes = await fetch(
+        `https://api.printify.com/v1/catalog/blueprints/${blueprintId}/print_providers/${printProviderId}/variants.json`,
+        { headers: { authorization: `Bearer ${token}` } }
+      );
+      const data = (await variantsRes.json()) as { variants: Array<{ id: number }> };
+      variantIds = data.variants.map((v) => v.id);
+      lines.push(`Fetched ${variantIds.length} real variant ids.`);
+    } catch (err) {
+      lines.push(`Variant fetch failed: ${err instanceof Error ? err.message : String(err)}`);
+      return new NextResponse(lines.join("\n"), { headers: { "content-type": "text/plain" } });
+    }
+
+    // 3. The exact payload shape lib/printify.ts's createProduct sends.
+    const payload = {
+      title: "Diagnostic test product (safe to delete)",
+      description: "Diagnostic test product for Printify support",
+      tags: ["diagnostic", "test"],
+      blueprint_id: blueprintId,
+      print_provider_id: printProviderId,
+      variants: variantIds.map((id) => ({ id, price: 4500, is_enabled: true })),
+      print_areas: [
+        {
+          variant_ids: variantIds,
+          placeholders: [{ position: "front", images: [{ id: imageId, x: 0.5, y: 0.5, scale: 1, angle: 0 }] }],
+        },
+      ],
+    };
+
+    lines.push("");
+    lines.push("Full request body:");
+    lines.push(JSON.stringify(payload, null, 2));
+
+    // 4. POST it.
+    const res = await fetch(`https://api.printify.com/v1/shops/${shopId}/products.json`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const text = await res.text().catch(() => "");
+    lines.push("");
+    lines.push(`Response status: ${res.status}`);
+    lines.push(`Response body: ${text}`);
+    lines.push("Response headers:");
+    for (const [key, value] of res.headers.entries()) {
+      if (!["date", "content-length"].includes(key)) lines.push(`  ${key}: ${value}`);
+    }
+    lines.push("");
+    lines.push(
+      res.ok
+        ? "-> This succeeded! A real (unpublished) product was created — delete it from Printify if unwanted."
+        : "-> Failed — this is the exact repro to send Printify support: real endpoint, fully valid payload, full response above."
+    );
+
+    return new NextResponse(lines.join("\n"), { headers: { "content-type": "text/plain" } });
+  }
 
   if (testWrite) {
     const shopId = requireEnv("PRINTIFY_SHOP_ID");
