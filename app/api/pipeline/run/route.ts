@@ -3,11 +3,13 @@ import { getEnvInt } from "@/lib/env";
 import { createBatch, finalizeBatch, processOneRun } from "@/lib/pipeline";
 
 export const runtime = "nodejs";
-// Each design can take a few minutes (image gen + upscale polling + Canva/Etsy/
-// Printify calls). 800s requires Fluid Compute (on by default for new Vercel
-// Pro projects) — if your project predates that, lower this to <=300 and keep
-// LISTINGS_PER_DAY small, or split this into a queue-driven design instead.
-export const maxDuration = 800;
+// 300 is the max allowed on Vercel's Hobby plan (Pro + Fluid Compute allows
+// up to 800s). Each design takes a few minutes (image gen + upscale polling +
+// Canva/Etsy/Printify calls), so this comfortably fits one design a day.
+// If you raise LISTINGS_PER_DAY enough that a run risks exceeding 300s,
+// either upgrade to Pro (and raise this back up) or split this into a
+// queue-driven design instead.
+export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 function isAuthorized(request: Request): boolean {

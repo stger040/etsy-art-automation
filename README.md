@@ -249,6 +249,7 @@ seed:niches` lists/upserts rows.
   still flags a few Next 16-only fixes (image-optimizer DoS, Pages Router
   i18n middleware bypass, WS-upgrade SSRF) — none apply here since this app
   doesn't use `next/image`, i18n routing, or middleware WebSocket upgrades.
-- `maxDuration` on the run route is set to 800s, which requires Fluid Compute
-  (on by default for new Vercel Pro projects). If your project predates that,
-  lower it and keep `LISTINGS_PER_DAY` small.
+- `maxDuration` on the run route is set to 300s (Vercel Hobby's max), which
+  comfortably fits `LISTINGS_PER_DAY=1`. If you raise `LISTINGS_PER_DAY`
+  enough that a run risks running long, either keep an eye on it or move to
+  Vercel Pro with Fluid Compute (allows up to 800s) and raise this back up.
