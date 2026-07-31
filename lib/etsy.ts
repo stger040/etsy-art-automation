@@ -1,7 +1,7 @@
 import { getEnv, requireEnv } from "./env";
 import { getValidAccessToken } from "./oauth-store";
 import { fetchImageBuffer } from "./image";
-import type { GeneratedListing } from "./types";
+import type { ListingCopy } from "./types";
 
 const API_BASE = "https://api.etsy.com/v3/application";
 
@@ -65,7 +65,7 @@ function withAiDisclosure(description: string): string {
 }
 
 export async function createDraftDigitalListing(
-  listing: GeneratedListing
+  listing: ListingCopy
 ): Promise<{ listingId: string }> {
   const shopId = requireEnv("ETSY_SHOP_ID");
 

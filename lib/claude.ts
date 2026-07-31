@@ -1,5 +1,5 @@
 import { getEnv, requireEnv } from "./env";
-import type { ComplianceResult, GeneratedListing, Niche } from "./types";
+import type { ComplianceResult, GeneratedListing, ListingCopy, Niche } from "./types";
 
 const ANTHROPIC_VERSION = "2023-06-01";
 const MAX_TITLE_LENGTH = 140;
@@ -44,24 +44,76 @@ function extractToolInput<T>(response: Awaited<ReturnType<typeof anthropicMessag
   return block.input as T;
 }
 
+const listingCopySchema = {
+  type: "object",
+  properties: {
+    etsy_title: {
+      type: "string",
+      description: `SEO-optimized Etsy listing title, at most ${MAX_TITLE_LENGTH} characters.`,
+    },
+    etsy_tags: {
+      type: "array",
+      items: { type: "string" },
+      minItems: TAG_COUNT,
+      maxItems: TAG_COUNT,
+      description: `Exactly ${TAG_COUNT} Etsy search tags, each at most ${MAX_TAG_LENGTH} characters.`,
+    },
+    etsy_description: {
+      type: "string",
+      description: "Full Etsy listing description: what it is, sizing/format notes, and styling suggestions.",
+    },
+  },
+  required: ["etsy_title", "etsy_tags", "etsy_description"],
+};
+
+/** Normalizes one listing-copy variant against model drift — see comments below for what's been observed. */
+function sanitizeListingCopy(copy: ListingCopy): ListingCopy {
+  // Tool-use schemas aren't always followed exactly — etsy_tags has been
+  // observed coming back as a comma-separated string instead of an array
+  // despite the array schema, so normalize before relying on array methods.
+  const rawTags: unknown = copy.etsy_tags;
+  const tagsArray = Array.isArray(rawTags)
+    ? rawTags
+    : String(rawTags)
+        .split(/[,\n]/)
+        .map((t) => t.trim())
+        .filter(Boolean);
+
+  // Also seen: stray tool-call-looking fragments (e.g. "</etsy_description>",
+  // "</invoke>") bleeding into the end of free-text fields. Strip them.
+  const stripStrayTags = (text: string) => text.replace(/<\/?[a-z_]+>\s*/gi, "").trim();
+
+  return {
+    etsy_title: stripStrayTags(copy.etsy_title).slice(0, MAX_TITLE_LENGTH),
+    etsy_tags: tagsArray.slice(0, TAG_COUNT).map((t) => String(t).slice(0, MAX_TAG_LENGTH)),
+    etsy_description: stripStrayTags(copy.etsy_description),
+  };
+}
+
 /**
- * Generates one art theme + Etsy listing copy for the given niche.
- * Uses a forced tool call so the response is guaranteed well-formed JSON
- * rather than parsing free text.
+ * Generates one art theme + two Etsy listing-copy variants for the given
+ * niche: one for the digital-download listing, one for the physical
+ * Printify-fulfilled listing. These have to read differently — a digital
+ * listing promises an instant printable file with no shipment, a physical
+ * one promises a shipped, ready-to-hang printed product — so reusing one
+ * description across both would just be wrong on whichever one it's not
+ * written for. Uses a forced tool call so the response is guaranteed
+ * well-formed JSON rather than parsing free text.
  */
 export async function generateListing(niche: Niche): Promise<GeneratedListing> {
   const response = await anthropicMessages({
     model: model(),
-    max_tokens: 1500,
+    max_tokens: 2500,
     system:
       "You are an Etsy print-on-demand and digital download listing copywriter and art director. " +
       "You generate a single new, sellable wall-art concept per request, along with SEO-optimized " +
-      "Etsy listing copy. Never reuse or closely paraphrase a well-known copyrighted character, logo, " +
-      "or brand — all concepts must be original.",
+      "Etsy listing copy for TWO separate listings of the same artwork: a digital download listing " +
+      "and a physical printed (canvas/poster) listing. Never reuse or closely paraphrase a well-known " +
+      "copyrighted character, logo, or brand — all concepts must be original.",
     tools: [
       {
         name: "emit_listing",
-        description: "Emit one generated art theme and its Etsy listing copy.",
+        description: "Emit one generated art theme, its image prompt, and separate digital/physical listing copy.",
         input_schema: {
           type: "object",
           properties: {
@@ -70,23 +122,26 @@ export async function generateListing(niche: Niche): Promise<GeneratedListing> {
               type: "string",
               description: `Detailed text-to-image generation prompt describing composition, subject, style, palette, and mood. At most ${MAX_IMAGE_PROMPT_LENGTH} characters — the image API this feeds into rejects longer prompts.`,
             },
-            etsy_title: {
-              type: "string",
-              description: `SEO-optimized Etsy listing title, at most ${MAX_TITLE_LENGTH} characters.`,
+            digital: {
+              ...listingCopySchema,
+              description:
+                "Listing copy for the DIGITAL DOWNLOAD version: an instant-download printable file, no physical " +
+                "item ships. Title/tags should include digital-download search terms (e.g. 'printable', 'digital " +
+                "download', 'instant download'). Description must clearly state it's a digital file only, list " +
+                "included print sizes/ratios, and give print-at-home or local-print-shop guidance.",
             },
-            etsy_tags: {
-              type: "array",
-              items: { type: "string" },
-              minItems: TAG_COUNT,
-              maxItems: TAG_COUNT,
-              description: `Exactly ${TAG_COUNT} Etsy search tags, each at most ${MAX_TAG_LENGTH} characters.`,
-            },
-            etsy_description: {
-              type: "string",
-              description: "Full Etsy listing description: what it is, sizing/format notes, and styling suggestions.",
+            physical: {
+              ...listingCopySchema,
+              description:
+                "Listing copy for the PHYSICAL PRINTED version: a canvas/poster print that ships to the buyer, " +
+                "produced via print-on-demand. Title/tags should include physical-product search terms (e.g. " +
+                "'canvas wall art', 'ready to hang', 'framed print') and must NOT use digital-download language " +
+                "like 'printable' or 'instant download'. Description must clearly state it's a physical item that " +
+                "ships, mention it arrives ready to hang, and give a general production/shipping timeframe note " +
+                "rather than exact dates.",
             },
           },
-          required: ["theme", "image_prompt", "etsy_title", "etsy_tags", "etsy_description"],
+          required: ["theme", "image_prompt", "digital", "physical"],
         },
       },
     ],
@@ -99,9 +154,10 @@ export async function generateListing(niche: Niche): Promise<GeneratedListing> {
           `Niche description: ${niche.description}\n` +
           `Visual style guidance: ${niche.prompt_style}\n\n` +
           `Requirements:\n` +
-          `- etsy_title: <= ${MAX_TITLE_LENGTH} characters, keyword-rich, no clickbait.\n` +
-          `- etsy_tags: exactly ${TAG_COUNT} tags, each <= ${MAX_TAG_LENGTH} characters, no duplicates.\n` +
+          `- etsy_title (both variants): <= ${MAX_TITLE_LENGTH} characters, keyword-rich, no clickbait.\n` +
+          `- etsy_tags (both variants): exactly ${TAG_COUNT} tags, each <= ${MAX_TAG_LENGTH} characters, no duplicates.\n` +
           `- image_prompt: <= ${MAX_IMAGE_PROMPT_LENGTH} characters, specific enough for a text-to-image model to produce a print-ready piece of art.\n` +
+          `- The digital and physical descriptions must NOT contradict each other's delivery method — see the field descriptions above.\n` +
           `- The concept must be original — do not reference any real copyrighted character, logo, or brand.`,
       },
     ],
@@ -109,26 +165,9 @@ export async function generateListing(niche: Niche): Promise<GeneratedListing> {
 
   const listing = extractToolInput<GeneratedListing>(response, "emit_listing");
 
-  // Defensive cleanup in case the model drifts slightly outside limits.
-  // Tool-use schemas aren't always followed exactly — etsy_tags has been
-  // observed coming back as a comma-separated string instead of an array
-  // despite the array schema, so normalize before relying on array methods.
-  const rawTags: unknown = listing.etsy_tags;
-  const tagsArray = Array.isArray(rawTags)
-    ? rawTags
-    : String(rawTags)
-        .split(/[,\n]/)
-        .map((t) => t.trim())
-        .filter(Boolean);
-
-  // Also seen: stray tool-call-looking fragments (e.g. "</etsy_description>",
-  // "</invoke>") bleeding into the end of free-text fields. Strip them.
-  const stripStrayTags = (text: string) => text.replace(/<\/?[a-z_]+>\s*/gi, "").trim();
-
-  listing.etsy_title = stripStrayTags(listing.etsy_title).slice(0, MAX_TITLE_LENGTH);
-  listing.etsy_tags = tagsArray.slice(0, TAG_COUNT).map((t) => String(t).slice(0, MAX_TAG_LENGTH));
-  listing.etsy_description = stripStrayTags(listing.etsy_description);
   listing.image_prompt = listing.image_prompt.slice(0, MAX_IMAGE_PROMPT_LENGTH);
+  listing.digital = sanitizeListingCopy(listing.digital);
+  listing.physical = sanitizeListingCopy(listing.physical);
 
   return listing;
 }

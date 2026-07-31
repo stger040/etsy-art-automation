@@ -29,9 +29,15 @@ export type PipelineRun = {
   niche_id: number | null;
   theme: string | null;
   image_prompt: string | null;
+  // Digital-download listing copy.
   etsy_title: string | null;
   etsy_tags: string[] | null;
   etsy_description: string | null;
+  // Physical (Printify canvas/poster) listing copy — different framing:
+  // ships as a print, not a printable file.
+  physical_etsy_title: string | null;
+  physical_etsy_tags: string[] | null;
+  physical_etsy_description: string | null;
   base_image_url: string | null;
   upscaled_image_url: string | null;
   blob_url: string | null;
@@ -63,13 +69,25 @@ export type PipelineBatch = {
   completed_at: string | null;
 };
 
-/** Structured output Claude produces per design/listing. */
-export type GeneratedListing = {
-  theme: string;
-  image_prompt: string;
+/** Etsy title/tags/description tailored to one sales channel. */
+export type ListingCopy = {
   etsy_title: string;
   etsy_tags: string[];
   etsy_description: string;
+};
+
+/**
+ * Structured output Claude produces per design. `digital` and `physical` are
+ * separate listing copy because they're fundamentally different Etsy
+ * listing types (instant download file vs. a shipped printed product) and
+ * need to be described differently to buyers — a digital listing's "no
+ * physical item ships" language would be actively wrong on a physical one.
+ */
+export type GeneratedListing = {
+  theme: string;
+  image_prompt: string;
+  digital: ListingCopy;
+  physical: ListingCopy;
 };
 
 export type ComplianceResult = {

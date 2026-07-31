@@ -15,18 +15,26 @@ those are manual one-time steps you do yourself.
 ```
 Vercel Cron (daily) → /api/pipeline/run
   for each of LISTINGS_PER_DAY designs:
-    a. Claude          → theme + image prompt + Etsy title/tags/description
+    a. Claude          → theme + image prompt + TWO listing copy variants
+                          (digital: instant download; physical: ships as a print)
     b. Recraft         → base image
     c. Replicate       → upscale to >=4500x6000
     d. Vercel Blob     → durable image URL
     e. Claude (vision) → compliance check (IP/logos/public figures) — fail closed
     f. if approved:
-         digital:  Canva autofill/export mockup → Etsy draft listing (type=download)
-         physical: Printify product (poster + canvas) → publish via Printify's Etsy integration
+         digital:  Canva autofill/export mockup → Etsy draft listing (type=download), using the digital copy
+         physical: Printify product (poster + canvas) → publish via Printify's Etsy integration, using the physical copy
     g. every step's result/error is logged to Postgres (pipeline_runs, pipeline_step_errors)
 
 /api/pipeline/status → JSON run history, also feeds /dashboard
 ```
+
+Digital and physical get **separate** Etsy listing copy (title, tags, and
+description each), not the same text reused — they're fundamentally
+different listing types (an instant-download file vs. a shipped printed
+product) and need to say so accurately. Etsy itself doesn't support mixing
+"digital file" and "physical shipped item" as options within one listing, so
+"offering both" means two separate listings per design, one per channel.
 
 Every external call is wrapped so a single failure (e.g. Printify down) is
 logged and skipped rather than crashing the whole run — see `lib/logger.ts`'s
@@ -40,21 +48,27 @@ the upscale entirely this way.
 
 ## Manual publish fallback
 
-If a design finishes generation and passes the compliance check but fails to
-auto-publish anywhere (e.g. an external API is down), nothing is lost — the
-image and listing copy are already generated and stored. Visit
-**`/manual-queue`** to see those designs with the full-res image, one-click
-copy buttons for the title/tags/description, and a link to Printify's
-catalog, so you can create the listing by hand in under a minute. Mark it
-done there once you have, and it drops off the list.
+If a design passes the compliance check but a channel (digital, physical, or
+both — tracked independently) fails to auto-publish, nothing is lost — the
+image and listing copy for both channels already exist. Visit
+**`/manual-queue`** to see exactly which channel(s) failed per design, with
+the full-res image, one-click copy buttons for that channel's title/tags/
+description, and (for physical) a link to Printify's catalog — so you can
+create the listing by hand in under a minute. Mark it done there once you
+have, and it drops off the list. This correctly distinguishes "a channel was
+disabled on purpose" (never shows up here) from "a channel was attempted and
+failed" (shows up here), even when the other channel succeeded fine.
 
-This requires `manual_review_status` on `pipeline_runs`, added by a schema
-change — if you already ran `db/schema.sql` once, re-run it (it's
-idempotent) or just run this one line in Neon's SQL editor:
+This requires a few columns on `pipeline_runs` added by schema changes — if
+you already ran `db/schema.sql` once, just re-run it (it's idempotent) or
+run these lines directly in Neon's SQL editor:
 
 ```sql
 alter table pipeline_runs add column if not exists manual_review_status text not null default 'pending'
   check (manual_review_status in ('pending', 'published', 'skipped'));
+alter table pipeline_runs add column if not exists physical_etsy_title text;
+alter table pipeline_runs add column if not exists physical_etsy_tags text[];
+alter table pipeline_runs add column if not exists physical_etsy_description text;
 ```
 
 ## Setup

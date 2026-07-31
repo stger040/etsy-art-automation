@@ -1,15 +1,13 @@
 import "dotenv/config";
 import { createDraftDigitalListing, uploadDigitalFile, uploadListingImage } from "../lib/etsy";
-import type { GeneratedListing } from "../lib/types";
+import type { ListingCopy } from "../lib/types";
 
 const DEFAULT_TEST_IMAGE = "https://placehold.co/1500x2000.png?text=art";
 
 async function main() {
   console.log("*** This creates a REAL draft listing in your Etsy shop. It will NOT be activated/published. ***");
 
-  const listing: GeneratedListing = {
-    theme: "Test botanical line art",
-    image_prompt: "test",
+  const listing: ListingCopy = {
     etsy_title: "Test Draft Listing - Botanical Line Art Printable Wall Decor (pipeline test)",
     etsy_tags: [
       "botanical art",

@@ -16,8 +16,17 @@ async function main() {
   console.log("Generating listing copy...");
   const listing = await generateListing(niche);
   console.log(JSON.stringify(listing, null, 2));
-  console.log(`Title length: ${listing.etsy_title.length} (max 140)`);
-  console.log(`Tag count: ${listing.etsy_tags.length} (need 13), max tag length: ${Math.max(...listing.etsy_tags.map((t) => t.length))} (max 20)`);
+  for (const [label, copy] of [
+    ["digital", listing.digital],
+    ["physical", listing.physical],
+  ] as const) {
+    console.log(`\n[${label}] Title length: ${copy.etsy_title.length} (max 140)`);
+    console.log(
+      `[${label}] Tag count: ${copy.etsy_tags.length} (need 13), max tag length: ${Math.max(
+        ...copy.etsy_tags.map((t) => t.length)
+      )} (max 20)`
+    );
+  }
 
   const imageUrl = process.argv[2];
   if (imageUrl) {

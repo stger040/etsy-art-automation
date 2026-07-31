@@ -1,5 +1,5 @@
 import { getEnvBool, getEnvInt, requireEnv } from "./env";
-import type { GeneratedListing } from "./types";
+import type { ListingCopy } from "./types";
 
 const API_BASE = "https://api.printify.com/v1";
 
@@ -162,7 +162,7 @@ type BlueprintConfig = {
  * PRINTIFY_SHIRT_IMAGE_SCALE if the art is cropped too tight or too small.
  */
 export async function createAndPublishPodProducts(
-  listing: GeneratedListing,
+  listing: ListingCopy,
   imageUrl: string,
   runId: string,
   imageWidth: number,

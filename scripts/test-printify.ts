@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { createAndPublishPodProducts } from "../lib/printify";
-import type { GeneratedListing } from "../lib/types";
+import type { ListingCopy } from "../lib/types";
 
 const DEFAULT_TEST_IMAGE = "https://placehold.co/4500x6000.png?text=art";
 
@@ -10,9 +10,7 @@ async function main() {
   );
 
   const imageUrl = process.argv[2] ?? DEFAULT_TEST_IMAGE;
-  const listing: GeneratedListing = {
-    theme: "Test botanical line art",
-    image_prompt: "test",
+  const listing: ListingCopy = {
     etsy_title: "Test Product - Botanical Line Art Poster (pipeline test)",
     etsy_tags: ["botanical art", "line art print", "minimalist decor", "poster print", "wall art"],
     etsy_description: "This is a test product created by the pipeline's isolated Printify test script.",

@@ -18,10 +18,9 @@ export default async function ManualQueuePage() {
       </p>
       <h1>Manual publish queue</h1>
       <p style={{ color: "#8b949e" }}>
-        Designs that finished generation and passed the compliance check, but failed to auto-publish anywhere
-        (currently: Printify write access being down — see the shop connection issue). Download the image, copy the
-        listing copy, and create the product by hand in Printify. Mark it done here once you have, so it drops off
-        this list.
+        Designs that passed the compliance check but failed to auto-publish on one or both channels (digital,
+        physical, or both — each shown separately below when it applies). Download the image, copy the listing
+        copy, and create the listing by hand. Mark it done here once you have, so it drops off this list.
       </p>
 
       {items.length === 0 && (

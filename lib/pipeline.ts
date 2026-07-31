@@ -68,9 +68,12 @@ export async function processOneRun(batchId: string): Promise<RunOutcome> {
   await updateRun(runId, {
     theme: listing.theme,
     image_prompt: listing.image_prompt,
-    etsy_title: listing.etsy_title,
-    etsy_tags: listing.etsy_tags,
-    etsy_description: listing.etsy_description,
+    etsy_title: listing.digital.etsy_title,
+    etsy_tags: listing.digital.etsy_tags,
+    etsy_description: listing.digital.etsy_description,
+    physical_etsy_title: listing.physical.etsy_title,
+    physical_etsy_tags: listing.physical.etsy_tags,
+    physical_etsy_description: listing.physical.etsy_description,
     status: "generating_image",
   });
 
@@ -128,7 +131,9 @@ export async function processOneRun(batchId: string): Promise<RunOutcome> {
     const mockup = await runStep("canva_mockup", ctx, () => createMockup(blobUrl, runId));
     const listingImageUrl = mockup?.mockupUrl ?? blobUrl;
 
-    const etsyListing = await runStep("etsy_create_draft_listing", ctx, () => createDraftDigitalListing(listing));
+    const etsyListing = await runStep("etsy_create_draft_listing", ctx, () =>
+      createDraftDigitalListing(listing.digital)
+    );
     if (etsyListing) {
       await runStep("etsy_upload_digital_file", ctx, () =>
         uploadDigitalFile(etsyListing.listingId, blobUrl, `${listing.theme.replace(/[^a-z0-9]+/gi, "-")}.png`)
@@ -155,7 +160,7 @@ export async function processOneRun(batchId: string): Promise<RunOutcome> {
   if (getEnvBool("PIPELINE_ENABLE_PHYSICAL", true)) {
     await setStatus(runId, "publishing_physical");
     const printify = await runStep("printify_create_and_publish", ctx, () =>
-      createAndPublishPodProducts(listing, blobUrl, runId, upscaled.width, upscaled.height)
+      createAndPublishPodProducts(listing.physical, blobUrl, runId, upscaled.width, upscaled.height)
     );
     if (printify) {
       listingTypes.push("physical");

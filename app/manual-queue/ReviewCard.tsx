@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { ReactNode } from "react";
 import type { ManualQueueItem } from "@/lib/status";
 
 function CopyButton({ label, text }: { label: string; text: string }) {
@@ -24,6 +25,58 @@ function CopyButton({ label, text }: { label: string; text: string }) {
     >
       {copied ? "Copied!" : label}
     </button>
+  );
+}
+
+function CopyField({ label, text }: { label: string; text: string | null }) {
+  if (!text) return null;
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <strong>{label}</strong>
+        <CopyButton label={`Copy ${label.toLowerCase()}`} text={text} />
+      </div>
+      <div
+        style={{
+          padding: 8,
+          background: "#161b22",
+          borderRadius: 4,
+          marginTop: 4,
+          fontSize: 13,
+          whiteSpace: "pre-wrap",
+          maxHeight: 160,
+          overflowY: "auto",
+        }}
+      >
+        {text}
+      </div>
+    </div>
+  );
+}
+
+function ChannelSection({
+  channelLabel,
+  title,
+  tags,
+  description,
+  footer,
+}: {
+  channelLabel: string;
+  title: string | null;
+  tags: string[] | null;
+  description: string | null;
+  footer?: ReactNode;
+}) {
+  return (
+    <div style={{ border: "1px solid #21262d", borderRadius: 6, padding: 12, marginBottom: 12 }}>
+      <div style={{ color: "#d29922", fontSize: 12, fontWeight: "bold", marginBottom: 8, textTransform: "uppercase" }}>
+        {channelLabel} — failed to auto-publish
+      </div>
+      <CopyField label="Title" text={title} />
+      <CopyField label="Tags" text={(tags ?? []).join(", ")} />
+      <CopyField label="Description" text={description} />
+      {footer}
+    </div>
   );
 }
 
@@ -65,8 +118,6 @@ export default function ReviewCard({
       </div>
     );
   }
-
-  const tagsText = (run.etsy_tags ?? []).join(", ");
 
   return (
     <div
@@ -111,57 +162,49 @@ export default function ReviewCard({
       </div>
 
       <div>
-        <div style={{ color: "#8b949e", fontSize: 12, marginBottom: 4 }}>
+        <div style={{ color: "#8b949e", fontSize: 12, marginBottom: 10 }}>
           {run.niche_name} — {new Date(run.created_at).toLocaleString()}
         </div>
 
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <strong>Title</strong>
-            {run.etsy_title && <CopyButton label="Copy title" text={run.etsy_title} />}
-          </div>
-          <div style={{ padding: 8, background: "#161b22", borderRadius: 4, marginTop: 4 }}>{run.etsy_title}</div>
-        </div>
+        {run.digital_failed && (
+          <ChannelSection
+            channelLabel="Digital download listing"
+            title={run.etsy_title}
+            tags={run.etsy_tags}
+            description={run.etsy_description}
+            footer={
+              <div style={{ color: "#8b949e", fontSize: 12 }}>
+                Create as a new digital download listing in Etsy's own listing editor (Shop Manager → Listings →
+                Add a listing), upload the downloaded image as the digital file, and remember to check Etsy's
+                "made with AI" disclosure box.
+              </div>
+            }
+          />
+        )}
 
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <strong>Tags</strong>
-            <CopyButton label="Copy tags" text={tagsText} />
-          </div>
-          <div style={{ padding: 8, background: "#161b22", borderRadius: 4, marginTop: 4, fontSize: 13 }}>
-            {tagsText}
-          </div>
-        </div>
-
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <strong>Description</strong>
-            {run.etsy_description && <CopyButton label="Copy description" text={run.etsy_description} />}
-          </div>
-          <div
-            style={{
-              padding: 8,
-              background: "#161b22",
-              borderRadius: 4,
-              marginTop: 4,
-              fontSize: 13,
-              whiteSpace: "pre-wrap",
-              maxHeight: 160,
-              overflowY: "auto",
-            }}
-          >
-            {run.etsy_description}
-          </div>
-        </div>
-
-        <div style={{ color: "#8b949e", fontSize: 12, marginBottom: 10 }}>
-          Suggested product in Printify's catalog: blueprint {suggestedBlueprintId}, print provider{" "}
-          {suggestedProviderId} (same one the automation would have used) —{" "}
-          <a href="https://printify.com/app/catalog" target="_blank" rel="noreferrer" style={{ color: "#7db7ff" }}>
-            open Printify's catalog
-          </a>{" "}
-          to create it manually with the downloaded image.
-        </div>
+        {run.physical_failed && (
+          <ChannelSection
+            channelLabel="Physical (Printify) listing"
+            title={run.physical_etsy_title}
+            tags={run.physical_etsy_tags}
+            description={run.physical_etsy_description}
+            footer={
+              <div style={{ color: "#8b949e", fontSize: 12 }}>
+                Suggested product: blueprint {suggestedBlueprintId}, print provider {suggestedProviderId} (same
+                one the automation uses) —{" "}
+                <a
+                  href="https://printify.com/app/catalog"
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ color: "#7db7ff" }}
+                >
+                  open Printify's catalog
+                </a>{" "}
+                to create it manually with the downloaded image.
+              </div>
+            }
+          />
+        )}
 
         {error && <div style={{ color: "#f85149", fontSize: 13, marginBottom: 8 }}>{error}</div>}
 

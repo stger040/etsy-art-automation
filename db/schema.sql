@@ -48,9 +48,15 @@ create table if not exists pipeline_runs (
   -- Claude-generated content
   theme text,
   image_prompt text,
+  -- Digital-download listing copy.
   etsy_title text,
   etsy_tags text[],
   etsy_description text,
+  -- Physical (Printify canvas/poster) listing copy — different framing:
+  -- ships as a print, not a printable file.
+  physical_etsy_title text,
+  physical_etsy_tags text[],
+  physical_etsy_description text,
 
   -- Image pipeline
   base_image_url text,
@@ -99,6 +105,13 @@ create table if not exists pipeline_runs (
 -- and blob_url is set (i.e. the asset exists, publishing is what failed).
 alter table pipeline_runs add column if not exists manual_review_status text not null default 'pending'
   check (manual_review_status in ('pending', 'published', 'skipped'));
+
+-- Separate listing copy for the physical (Printify) listing — added after
+-- discovering the digital-download copy was being reused on physical
+-- listings, wrongly telling buyers nothing would ship.
+alter table pipeline_runs add column if not exists physical_etsy_title text;
+alter table pipeline_runs add column if not exists physical_etsy_tags text[];
+alter table pipeline_runs add column if not exists physical_etsy_description text;
 
 create index if not exists idx_pipeline_runs_batch_id on pipeline_runs(batch_id);
 create index if not exists idx_pipeline_runs_status on pipeline_runs(status);
