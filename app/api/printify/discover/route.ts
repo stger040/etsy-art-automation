@@ -55,6 +55,7 @@ export async function GET(request: Request) {
   const search = (url.searchParams.get("search") || "canvas").toLowerCase();
   const blueprintParam = url.searchParams.get("blueprint");
   const testWrite = url.searchParams.get("testwrite");
+  const raw = url.searchParams.get("raw");
 
   const lines: string[] = [];
 
@@ -189,6 +190,22 @@ export async function GET(request: Request) {
         ? "-> 401 means this is a genuine write-permission problem, not the request body."
         : "-> Not a 401, so auth for writes is working; the real pipeline failure has a different cause."
     );
+    return new NextResponse(lines.join("\n"), { headers: { "content-type": "text/plain" } });
+  }
+
+  if (blueprintParam && raw) {
+    // Dumps the completely unfiltered variants.json response for one
+    // provider, to see every field Printify actually returns (e.g. whether
+    // a per-variant `cost` field is present) rather than guessing from docs.
+    const blueprintId = Number(blueprintParam);
+    const printProviderId = Number(raw) || Number(process.env.PRINTIFY_CANVAS_PRINT_PROVIDER_ID) || 99;
+    lines.push(`=== Raw variants.json for blueprint ${blueprintId}, print_provider ${printProviderId} ===`);
+    try {
+      const data = await printifyFetch(`/catalog/blueprints/${blueprintId}/print_providers/${printProviderId}/variants.json`);
+      lines.push(JSON.stringify(data, null, 2));
+    } catch (err) {
+      lines.push(`Failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
     return new NextResponse(lines.join("\n"), { headers: { "content-type": "text/plain" } });
   }
 
