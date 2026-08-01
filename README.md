@@ -71,6 +71,19 @@ alter table pipeline_runs add column if not exists physical_etsy_tags text[];
 alter table pipeline_runs add column if not exists physical_etsy_description text;
 ```
 
+## Printify pricing
+
+Every physical variant is priced at `cost / (1 - PRINTIFY_PROFIT_MARGIN)`
+(default margin 30%), not a flat price — a flat price loses money on larger
+sizes, which cost far more to produce than small ones. Printify's catalog API
+doesn't expose per-variant cost ahead of time (confirmed by inspecting the
+raw `variants.json` response — it only has id/title/size/print-area info);
+cost is only revealed in the response of actually creating a product, priced
+against your account's real provider rates. So `lib/printify.ts` creates the
+product with placeholder pricing, reads the real cost back from that same
+response, computes the margin-based price per variant, and updates the
+product with those prices before publishing it.
+
 ## Setup
 
 ### 1. Database (Neon Postgres)
@@ -202,9 +215,8 @@ confirm them before relying on the full pipeline:
 - **Replicate** model version pinning (`REPLICATE_MODEL_VERSION` env var,
   optional) — recommended to pin once you've confirmed behavior via
   `npm run test:replicate`.
-- **Printify** variant pricing — every catalog variant is enabled at a flat
-  `PRINTIFY_DEFAULT_PRICE_CENTS`; adjust per-variant pricing in
-  `lib/printify.ts` if you want size-based pricing.
+- **Printify** variant pricing is cost-based (`PRINTIFY_PROFIT_MARGIN`, default
+  30%) — see "Printify pricing" below for how that works.
 
 ## Environment variables
 
@@ -238,9 +250,10 @@ you need to set in Vercel:
 | `PRINTIFY_ENABLE_POSTER`, `PRINTIFY_ENABLE_CANVAS` | Which physical product type(s) to create (both default `true`) |
 | `PRINTIFY_POSTER_BLUEPRINT_ID`, `PRINTIFY_POSTER_PRINT_PROVIDER_ID` | Poster product catalog IDs |
 | `PRINTIFY_CANVAS_BLUEPRINT_ID`, `PRINTIFY_CANVAS_PRINT_PROVIDER_ID` | Canvas product catalog IDs |
-| `PRINTIFY_DEFAULT_PRICE_CENTS` | Flat retail price applied to all variants |
+| `PRINTIFY_PROFIT_MARGIN` | Target profit margin applied to every variant's real cost (default `0.30`) — see "Printify pricing" above |
+| `PRINTIFY_DEFAULT_PRICE_CENTS` | Fallback price only, if Printify's response is ever missing a variant's cost |
 | `PRINTIFY_SHIRT_BLUEPRINT_ID`, `PRINTIFY_SHIRT_PRINT_PROVIDER_ID` | Optional — set to also create a t-shirt product per design |
-| `PRINTIFY_SHIRT_PRICE_CENTS`, `PRINTIFY_SHIRT_IMAGE_SCALE` | Shirt-specific price and art scale (tune after checking a preview — see `.env.example`) |
+| `PRINTIFY_SHIRT_IMAGE_SCALE` | Shirt-specific art scale (tune after checking a preview — see `.env.example`) |
 
 ## Why these niches
 

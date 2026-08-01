@@ -78,6 +78,19 @@ async function getMatchingVariantIds(
   return (matched.length > 0 ? matched : data.variants).map((v) => v.id);
 }
 
+/**
+ * Printify's catalog/variants endpoints never expose a variant's base cost
+ * (confirmed by inspecting the raw response — just id/title/size/print-area
+ * dimensions). The only place cost shows up is in the response of actually
+ * creating a product, computed against your account's real provider rates.
+ * So price = cost / (1 - margin), targeting a fixed profit margin regardless
+ * of size, rather than a flat price that loses money on larger prints.
+ */
+function priceFromCost(costCents: number | undefined, marginPct: number, fallbackCents: number): number {
+  if (!costCents || costCents <= 0) return fallbackCents;
+  return Math.round(costCents / (1 - marginPct));
+}
+
 async function createProduct(params: {
   title: string;
   description: string;
@@ -85,7 +98,8 @@ async function createProduct(params: {
   blueprintId: number;
   printProviderId: number;
   imageId: string;
-  priceCents: number;
+  fallbackPriceCents: number;
+  marginPct: number;
   imageScale?: number;
   imageWidth: number;
   imageHeight: number;
@@ -98,7 +112,10 @@ async function createProduct(params: {
     params.imageHeight
   );
 
-  const product = (await printifyFetch(`/shops/${shopId}/products.json`, {
+  // Placeholder equal pricing on creation — real per-variant cost only comes
+  // back in this same response, so accurate margin-based pricing is applied
+  // in a follow-up update right after, before anything gets published.
+  const created = (await printifyFetch(`/shops/${shopId}/products.json`, {
     method: "POST",
     body: JSON.stringify({
       title: params.title,
@@ -106,7 +123,7 @@ async function createProduct(params: {
       tags: params.tags,
       blueprint_id: params.blueprintId,
       print_provider_id: params.printProviderId,
-      variants: variantIds.map((id) => ({ id, price: params.priceCents, is_enabled: true })),
+      variants: variantIds.map((id) => ({ id, price: params.fallbackPriceCents, is_enabled: true })),
       print_areas: [
         {
           variant_ids: variantIds,
@@ -119,9 +136,20 @@ async function createProduct(params: {
         },
       ],
     }),
-  })) as { id: string };
+  })) as { id: string; variants: Array<{ id: number; cost?: number }> };
 
-  return product.id;
+  const pricedVariants = created.variants.map((v) => ({
+    id: v.id,
+    price: priceFromCost(v.cost, params.marginPct, params.fallbackPriceCents),
+    is_enabled: true,
+  }));
+
+  await printifyFetch(`/shops/${shopId}/products/${created.id}.json`, {
+    method: "PUT",
+    body: JSON.stringify({ variants: pricedVariants }),
+  });
+
+  return created.id;
 }
 
 async function publishProduct(productId: string): Promise<void> {
@@ -141,7 +169,6 @@ type BlueprintConfig = {
   label: string;
   blueprintId: number;
   printProviderId: number;
-  priceCents: number;
   imageScale?: number;
 };
 
@@ -151,8 +178,11 @@ type BlueprintConfig = {
  * PRINTIFY_ENABLE_CANVAS, both default true). Only the size variants whose
  * orientation (vertical/horizontal/square) matches the generated image are
  * enabled — a portrait design won't get landscape or square sizes enabled,
- * since those would crop or stretch it badly. All publish through Printify's
- * native Etsy sales channel integration.
+ * since those would crop or stretch it badly. Every variant is priced at
+ * PRINTIFY_PROFIT_MARGIN (default 30%) over its actual Printify cost, not a
+ * flat price — a flat price loses money on larger sizes, which cost far more
+ * to produce than small ones. All publish through Printify's native Etsy
+ * sales channel integration.
  *
  * A t-shirt product is included too if PRINTIFY_SHIRT_BLUEPRINT_ID is set —
  * left opt-in because apparel print areas are proportioned very differently
@@ -168,7 +198,8 @@ export async function createAndPublishPodProducts(
   imageWidth: number,
   imageHeight: number
 ): Promise<{ productIds: string[] }> {
-  const defaultPriceCents = getEnvInt("PRINTIFY_DEFAULT_PRICE_CENTS", 4500);
+  const fallbackPriceCents = getEnvInt("PRINTIFY_DEFAULT_PRICE_CENTS", 4500);
+  const marginPct = Number(process.env.PRINTIFY_PROFIT_MARGIN) || 0.3;
   const imageId = await uploadImage(imageUrl, `pipeline-run-${runId}.png`);
 
   const blueprints: BlueprintConfig[] = [];
@@ -178,7 +209,6 @@ export async function createAndPublishPodProducts(
       label: "poster",
       blueprintId: getEnvInt("PRINTIFY_POSTER_BLUEPRINT_ID", 97),
       printProviderId: getEnvInt("PRINTIFY_POSTER_PRINT_PROVIDER_ID", 1),
-      priceCents: defaultPriceCents,
     });
   }
 
@@ -187,7 +217,6 @@ export async function createAndPublishPodProducts(
       label: "canvas",
       blueprintId: getEnvInt("PRINTIFY_CANVAS_BLUEPRINT_ID", 196),
       printProviderId: getEnvInt("PRINTIFY_CANVAS_PRINT_PROVIDER_ID", 1),
-      priceCents: defaultPriceCents,
     });
   }
 
@@ -196,7 +225,6 @@ export async function createAndPublishPodProducts(
       label: "shirt",
       blueprintId: getEnvInt("PRINTIFY_SHIRT_BLUEPRINT_ID", 0),
       printProviderId: getEnvInt("PRINTIFY_SHIRT_PRINT_PROVIDER_ID", 1),
-      priceCents: getEnvInt("PRINTIFY_SHIRT_PRICE_CENTS", defaultPriceCents),
       imageScale: Number(process.env.PRINTIFY_SHIRT_IMAGE_SCALE) || 0.8,
     });
   }
@@ -210,7 +238,8 @@ export async function createAndPublishPodProducts(
       blueprintId: bp.blueprintId,
       printProviderId: bp.printProviderId,
       imageId,
-      priceCents: bp.priceCents,
+      fallbackPriceCents,
+      marginPct,
       imageScale: bp.imageScale,
       imageWidth,
       imageHeight,
