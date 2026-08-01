@@ -54,15 +54,26 @@ async function handle(request: Request) {
   let rejected = 0;
   let failed = 0;
 
-  for (let i = 0; i < listingsPerDay; i++) {
-    // Each design is fully isolated: one failing does not stop the others.
-    const outcome = await processOneRun(batchId);
-    if (outcome === "completed") succeeded++;
-    else if (outcome === "rejected") rejected++;
-    else failed++;
+  try {
+    for (let i = 0; i < listingsPerDay; i++) {
+      // Each design is fully isolated: one failing does not stop the others.
+      // The inner try/catch also guards against a design throwing an
+      // unhandled error (e.g. a DB schema mismatch) — without it, the whole
+      // batch would get stuck at status='running' forever with no record of
+      // what happened, since finalizeBatch below would never run.
+      try {
+        const outcome = await processOneRun(batchId);
+        if (outcome === "completed") succeeded++;
+        else if (outcome === "rejected") rejected++;
+        else failed++;
+      } catch (err) {
+        console.error("[pipeline:run] Unexpected error processing a design:", err);
+        failed++;
+      }
+    }
+  } finally {
+    await finalizeBatch(batchId, { succeeded, rejected, failed });
   }
-
-  await finalizeBatch(batchId, { succeeded, rejected, failed });
 
   return NextResponse.json({ batchId, requested: listingsPerDay, succeeded, rejected, failed });
 }
