@@ -118,7 +118,25 @@ function sanitizeListingCopy(copy: ListingCopy): ListingCopy {
  * written for. Uses a forced tool call so the response is guaranteed
  * well-formed JSON rather than parsing free text.
  */
+/**
+ * The model has occasionally (repeatedly, in practice) dropped a required
+ * field from its structured tool-call response despite the schema marking it
+ * required. generateListing retries this once on that specific failure
+ * before giving up, since a second attempt usually succeeds and it's far
+ * cheaper than losing an entire pipeline run over one bad response.
+ */
 export async function generateListing(niche: Niche, orientation: Orientation = "vertical"): Promise<GeneratedListing> {
+  try {
+    return await attemptGenerateListing(niche, orientation);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.startsWith("Claude response is missing required")) {
+      throw error;
+    }
+    return attemptGenerateListing(niche, orientation);
+  }
+}
+
+async function attemptGenerateListing(niche: Niche, orientation: Orientation): Promise<GeneratedListing> {
   const orientationGuidance =
     orientation === "horizontal"
       ? "This piece will be printed on a WIDE/LANDSCAPE canvas (wider than it is tall). Compose the scene so it " +
