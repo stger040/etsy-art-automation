@@ -64,6 +64,9 @@ create table if not exists pipeline_runs (
   blob_url text,
   image_width integer,
   image_height integer,
+  -- Picked randomly per design (lib/orientation.ts) for a mix of portrait
+  -- and landscape canvas/poster listings.
+  orientation text not null default 'vertical' check (orientation in ('vertical', 'horizontal')),
 
   -- Compliance check
   compliance_status text not null default 'pending'
@@ -112,6 +115,11 @@ alter table pipeline_runs add column if not exists manual_review_status text not
 alter table pipeline_runs add column if not exists physical_etsy_title text;
 alter table pipeline_runs add column if not exists physical_etsy_tags text[];
 alter table pipeline_runs add column if not exists physical_etsy_description text;
+
+-- Orientation is picked randomly per design (see lib/orientation.ts) so the
+-- shop ends up with a mix of portrait and landscape canvas/poster listings.
+alter table pipeline_runs add column if not exists orientation text not null default 'vertical'
+  check (orientation in ('vertical', 'horizontal'));
 
 create index if not exists idx_pipeline_runs_batch_id on pipeline_runs(batch_id);
 create index if not exists idx_pipeline_runs_status on pipeline_runs(status);

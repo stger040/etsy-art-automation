@@ -1,6 +1,7 @@
 import { getEnv, requireEnv } from "./env";
 import { getValidAccessToken } from "./oauth-store";
 import { fetchImageBuffer } from "./image";
+import type { Orientation } from "./orientation";
 
 const API_BASE = "https://api.canva.com/rest/v1";
 const POLL_INTERVAL_MS = 2000;
@@ -97,14 +98,23 @@ async function pollJob<TResult>(path: string): Promise<TResult> {
 /**
  * Autofills the configured mockup brand template with the art image, then
  * exports the result as a flat PNG mockup. Returns the design id (for
- * reference) and the exported mockup image URL.
+ * reference) and the exported mockup image URL. Uses CANVA_MOCKUP_TEMPLATE_ID
+ * for a portrait design, CANVA_MOCKUP_TEMPLATE_ID_HORIZONTAL for a landscape
+ * one — a portrait-framed template would badly crop/stretch a landscape image.
  *
  * Assumes the brand template has an image field named per CANVA_IMAGE_FIELD
  * (default "image") — check this with `get-brand-template-dataset` /
  * `npm run test:canva` against your actual template.
  */
-export async function createMockup(imageUrl: string, runId: string): Promise<{ designId: string; mockupUrl: string }> {
-  const templateId = requireEnv("CANVA_MOCKUP_TEMPLATE_ID");
+export async function createMockup(
+  imageUrl: string,
+  runId: string,
+  orientation: Orientation = "vertical"
+): Promise<{ designId: string; mockupUrl: string }> {
+  const templateId =
+    orientation === "horizontal"
+      ? requireEnv("CANVA_MOCKUP_TEMPLATE_ID_HORIZONTAL")
+      : requireEnv("CANVA_MOCKUP_TEMPLATE_ID");
   const imageFieldName = getEnv("CANVA_IMAGE_FIELD_NAME", "image");
 
   const assetId = await uploadAsset(imageUrl, `pipeline-run-${runId}`);

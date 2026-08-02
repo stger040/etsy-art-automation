@@ -43,6 +43,7 @@ export type PipelineRun = {
   blob_url: string | null;
   image_width: number | null;
   image_height: number | null;
+  orientation: "vertical" | "horizontal";
   compliance_status: "pending" | "approved" | "rejected";
   compliance_reason: string | null;
   listing_types: ListingTypes;

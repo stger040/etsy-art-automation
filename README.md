@@ -15,10 +15,11 @@ those are manual one-time steps you do yourself.
 ```
 Vercel Cron (daily) → /api/pipeline/run
   for each of LISTINGS_PER_DAY designs:
-    a. Claude          → theme + image prompt + TWO listing copy variants
+    0. Orientation     → randomly pick vertical or landscape (PIPELINE_LANDSCAPE_PROBABILITY)
+    a. Claude          → theme + image prompt (orientation-aware composition) + TWO listing copy variants
                           (digital: instant download; physical: ships as a print)
-    b. Recraft         → base image
-    c. Replicate       → upscale to >=4500x6000
+    b. Recraft         → base image, sized for the picked orientation
+    c. Replicate       → upscale to >=4500x6000 (portrait) or >=6000x4500 (landscape)
     d. Vercel Blob     → durable image URL
     e. Claude (vision) → compliance check (IP/logos/public figures) — fail closed
     f. if approved:
@@ -69,6 +70,37 @@ alter table pipeline_runs add column if not exists manual_review_status text not
 alter table pipeline_runs add column if not exists physical_etsy_title text;
 alter table pipeline_runs add column if not exists physical_etsy_tags text[];
 alter table pipeline_runs add column if not exists physical_etsy_description text;
+```
+
+## Orientation (portrait vs. landscape)
+
+Each design randomly gets a `vertical` or `horizontal` orientation
+(`lib/orientation.ts`, `PIPELINE_LANDSCAPE_PROBABILITY`, default `0.5` — an
+even mix), stored on `pipeline_runs.orientation`. That one choice flows
+through the whole pipeline:
+
+- **Claude** (`lib/claude.ts`) is told the orientation so the generated
+  `image_prompt` actually composes for a wide or tall canvas, instead of a
+  portrait composition getting stretched/cropped into landscape.
+- **Recraft** (`lib/recraft.ts`) requests a portrait (`RECRAFT_SIZE`,
+  default `1024x1365`) or landscape (`RECRAFT_SIZE_HORIZONTAL`, default
+  `1365x1024`) image size.
+- **Replicate** (`lib/replicate.ts`) upscales to at least 4500x6000
+  (portrait) or 6000x4500 (landscape).
+- **Printify** (`lib/printify.ts`) already measured the image's actual
+  width/height and only enables the matching vertical/horizontal size
+  variants — no change needed there, it just now actually receives landscape
+  images sometimes.
+- **Canva** (`lib/canva.ts`) autofills `CANVA_MOCKUP_TEMPLATE_ID` (portrait)
+  or `CANVA_MOCKUP_TEMPLATE_ID_HORIZONTAL` (landscape) — a portrait-framed
+  mockup would badly crop/stretch a landscape image, so you need a second
+  brand template built the same way as the first, just landscape.
+
+Migration for existing databases (idempotent, safe to re-run):
+
+```sql
+alter table pipeline_runs add column if not exists orientation text not null default 'vertical'
+  check (orientation in ('vertical', 'horizontal'));
 ```
 
 ## Printify pricing
@@ -143,8 +175,11 @@ var — this project does not automate account/app creation:
      copy it into `CANVA_REFRESH_TOKEN` in Vercel and redeploy. (This
      handles the PKCE code exchange for you; see
      `app/api/canva/authorize` and `app/api/canva/callback`.)
-  7. Have a brand template ready for the mockup (`CANVA_MOCKUP_TEMPLATE_ID`).
-     Confirm its autofill image field name matches `CANVA_IMAGE_FIELD_NAME`.
+  7. Have two brand templates ready for the mockup — one portrait
+     (`CANVA_MOCKUP_TEMPLATE_ID`), one landscape
+     (`CANVA_MOCKUP_TEMPLATE_ID_HORIZONTAL`) — since designs are picked at
+     random between the two orientations. Confirm both have an autofill image
+     field matching `CANVA_IMAGE_FIELD_NAME`.
 - **Etsy Open API v3** — register an app, complete OAuth once yourself to get
   an access/refresh token pair. Refresh tokens rotate on every use; this app
   persists the current pair in the `oauth_tokens` Postgres table after first
@@ -230,15 +265,17 @@ you need to set in Vercel:
 | `CRON_SECRET` | Shared secret required to call `/api/pipeline/run` |
 | `PIPELINE_ENABLED` | Must be `true` for the run route to do anything; keep `false` until Etsy/Printify are configured |
 | `PIPELINE_ENABLE_DIGITAL`, `PIPELINE_ENABLE_PHYSICAL` | Which listing branch(es) to publish per design (both default `true`) |
+| `PIPELINE_LANDSCAPE_PROBABILITY` | Fraction (0-1) of designs picked landscape vs. portrait (default `0.5`) — see "Orientation" above |
 | `ANTHROPIC_API_KEY` | Claude API |
 | `CLAUDE_MODEL` | Defaults to `claude-sonnet-4-6` |
 | `RECRAFT_API_KEY` | Recraft image generation |
-| `RECRAFT_STYLE`, `RECRAFT_SIZE` | Optional overrides |
+| `RECRAFT_STYLE`, `RECRAFT_SIZE`, `RECRAFT_SIZE_HORIZONTAL` | Optional overrides — portrait/landscape image size |
 | `REPLICATE_API_TOKEN` | Replicate upscaling |
 | `REPLICATE_MODEL`, `REPLICATE_MODEL_VERSION` | Optional overrides |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob |
 | `CANVA_CLIENT_ID`, `CANVA_CLIENT_SECRET`, `CANVA_REFRESH_TOKEN` | Canva Connect OAuth |
-| `CANVA_MOCKUP_TEMPLATE_ID` | Brand template to autofill |
+| `CANVA_MOCKUP_TEMPLATE_ID` | Portrait brand template to autofill |
+| `CANVA_MOCKUP_TEMPLATE_ID_HORIZONTAL` | Landscape brand template to autofill |
 | `CANVA_IMAGE_FIELD_NAME` | Template's autofill image field name (default `image`) |
 | `ETSY_API_KEY` | Etsy app keystring (OAuth client id) |
 | `ETSY_ACCESS_TOKEN`, `ETSY_REFRESH_TOKEN` | Seed OAuth tokens (self-refreshing after) |

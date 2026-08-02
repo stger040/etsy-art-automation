@@ -1,8 +1,11 @@
 import { getEnv, requireEnv } from "./env";
 import { computeUpscaleFactor, getImageDimensions } from "./image";
+import type { Orientation } from "./orientation";
 
-const TARGET_WIDTH = 4500;
-const TARGET_HEIGHT = 6000;
+const TARGET_DIMENSIONS: Record<Orientation, { width: number; height: number }> = {
+  vertical: { width: 4500, height: 6000 },
+  horizontal: { width: 6000, height: 4500 },
+};
 const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS = 4 * 60 * 1000;
 
@@ -70,13 +73,18 @@ async function pollPrediction(prediction: Prediction): Promise<Prediction> {
 }
 
 /**
- * Upscales imageUrl via Real-ESRGAN to at least 4500x6000px. Computes the
- * scale factor from the source image's actual dimensions rather than
+ * Upscales imageUrl via Real-ESRGAN to at least the target resolution for the
+ * given orientation (4500x6000 portrait, or 6000x4500 landscape). Computes
+ * the scale factor from the source image's actual dimensions rather than
  * assuming Recraft's output size, so it stays correct if RECRAFT_SIZE changes.
  */
-export async function upscaleImage(imageUrl: string): Promise<{ url: string; width: number; height: number }> {
+export async function upscaleImage(
+  imageUrl: string,
+  orientation: Orientation = "vertical"
+): Promise<{ url: string; width: number; height: number }> {
+  const target = TARGET_DIMENSIONS[orientation];
   const sourceDims = await getImageDimensions(imageUrl);
-  const scale = computeUpscaleFactor(sourceDims, { width: TARGET_WIDTH, height: TARGET_HEIGHT });
+  const scale = computeUpscaleFactor(sourceDims, target);
 
   const started = await createPrediction(imageUrl, scale);
   const finished = await pollPrediction(started);
@@ -87,9 +95,9 @@ export async function upscaleImage(imageUrl: string): Promise<{ url: string; wid
   }
 
   const finalDims = await getImageDimensions(output);
-  if (finalDims.width < TARGET_WIDTH || finalDims.height < TARGET_HEIGHT) {
+  if (finalDims.width < target.width || finalDims.height < target.height) {
     throw new Error(
-      `Upscaled image (${finalDims.width}x${finalDims.height}) is smaller than the required ${TARGET_WIDTH}x${TARGET_HEIGHT}`
+      `Upscaled image (${finalDims.width}x${finalDims.height}) is smaller than the required ${target.width}x${target.height}`
     );
   }
 

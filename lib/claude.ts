@@ -1,5 +1,6 @@
 import { getEnv, requireEnv } from "./env";
 import type { ComplianceResult, GeneratedListing, ListingCopy, Niche } from "./types";
+import type { Orientation } from "./orientation";
 
 const ANTHROPIC_VERSION = "2023-06-01";
 const MAX_TITLE_LENGTH = 140;
@@ -100,7 +101,16 @@ function sanitizeListingCopy(copy: ListingCopy): ListingCopy {
  * written for. Uses a forced tool call so the response is guaranteed
  * well-formed JSON rather than parsing free text.
  */
-export async function generateListing(niche: Niche): Promise<GeneratedListing> {
+export async function generateListing(niche: Niche, orientation: Orientation = "vertical"): Promise<GeneratedListing> {
+  const orientationGuidance =
+    orientation === "horizontal"
+      ? "This piece will be printed on a WIDE/LANDSCAPE canvas (wider than it is tall). Compose the scene so it " +
+        "reads well in a wide format — e.g. a horizontal sweep of subject matter or a scene with side-to-side " +
+        "visual interest — not a portrait composition that would just get cropped or stretched to fit."
+      : "This piece will be printed on a TALL/PORTRAIT canvas (taller than it is wide). Compose the scene so it " +
+        "reads well in a tall format — vertical visual flow or a centered subject with headroom — not a " +
+        "landscape composition that would just get cropped or stretched to fit.";
+
   const response = await anthropicMessages({
     model: model(),
     max_tokens: 2500,
@@ -120,7 +130,7 @@ export async function generateListing(niche: Niche): Promise<GeneratedListing> {
             theme: { type: "string", description: "Short internal name for this art concept." },
             image_prompt: {
               type: "string",
-              description: `Detailed text-to-image generation prompt describing composition, subject, style, palette, and mood. At most ${MAX_IMAGE_PROMPT_LENGTH} characters — the image API this feeds into rejects longer prompts.`,
+              description: `Detailed text-to-image generation prompt describing composition, subject, style, palette, and mood. Must match the orientation given in the request. At most ${MAX_IMAGE_PROMPT_LENGTH} characters — the image API this feeds into rejects longer prompts.`,
             },
             digital: {
               ...listingCopySchema,
@@ -152,7 +162,8 @@ export async function generateListing(niche: Niche): Promise<GeneratedListing> {
         content:
           `Generate one new wall-art concept for the "${niche.name}" niche.\n` +
           `Niche description: ${niche.description}\n` +
-          `Visual style guidance: ${niche.prompt_style}\n\n` +
+          `Visual style guidance: ${niche.prompt_style}\n` +
+          `Orientation: ${orientationGuidance}\n\n` +
           `Requirements:\n` +
           `- etsy_title (both variants): <= ${MAX_TITLE_LENGTH} characters, keyword-rich, no clickbait.\n` +
           `- etsy_tags (both variants): exactly ${TAG_COUNT} tags, each <= ${MAX_TAG_LENGTH} characters, no duplicates.\n` +
