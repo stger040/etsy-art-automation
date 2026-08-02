@@ -69,6 +69,23 @@ const listingCopySchema = {
 
 /** Normalizes one listing-copy variant against model drift — see comments below for what's been observed. */
 function sanitizeListingCopy(copy: ListingCopy): ListingCopy {
+  // Despite being marked required in the tool schema, the model has
+  // occasionally omitted etsy_title or etsy_description entirely for a given
+  // variant. Fail with a clear, catchable error instead of crashing deep
+  // inside a .replace() call on undefined.
+  if (typeof copy.etsy_title !== "string" || typeof copy.etsy_description !== "string") {
+    throw new Error(
+      `Claude response is missing required listing-copy field(s): ${
+        [
+          typeof copy.etsy_title !== "string" && "etsy_title",
+          typeof copy.etsy_description !== "string" && "etsy_description",
+        ]
+          .filter(Boolean)
+          .join(", ")
+      }`
+    );
+  }
+
   // Tool-use schemas aren't always followed exactly — etsy_tags has been
   // observed coming back as a comma-separated string instead of an array
   // despite the array schema, so normalize before relying on array methods.
@@ -175,6 +192,16 @@ export async function generateListing(niche: Niche, orientation: Orientation = "
   });
 
   const listing = extractToolInput<GeneratedListing>(response, "emit_listing");
+
+  if (typeof listing.theme !== "string" || typeof listing.image_prompt !== "string") {
+    throw new Error(
+      `Claude response is missing required field(s): ${
+        [typeof listing.theme !== "string" && "theme", typeof listing.image_prompt !== "string" && "image_prompt"]
+          .filter(Boolean)
+          .join(", ")
+      }`
+    );
+  }
 
   listing.image_prompt = listing.image_prompt.slice(0, MAX_IMAGE_PROMPT_LENGTH);
   listing.digital = sanitizeListingCopy(listing.digital);
