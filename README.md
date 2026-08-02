@@ -104,25 +104,12 @@ alter table pipeline_runs add column if not exists orientation text not null def
 
 ## Mockup room style (light vs. dark "man cave")
 
-Independently of orientation, each design also randomly gets a `light` or
-`dark` mockup room style (`lib/mockupStyle.ts`,
-`PIPELINE_DARK_MOCKUP_PROBABILITY`, default `0.3` — dark stays a minority
-style), stored on `pipeline_runs.mockup_style`. This only changes which Canva
-mockup gets autofilled — a light neutral room, or a dark moody "man cave"
-room — the art, pricing, and listing copy are unaffected. Combined with
-orientation, this means four Canva brand templates total:
-
-| | Portrait | Landscape |
-|---|---|---|
-| Light | `CANVA_MOCKUP_TEMPLATE_ID` | `CANVA_MOCKUP_TEMPLATE_ID_HORIZONTAL` |
-| Dark | `CANVA_MOCKUP_TEMPLATE_ID_DARK` | `CANVA_MOCKUP_TEMPLATE_ID_DARK_HORIZONTAL` |
-
-Migration for existing databases (idempotent, safe to re-run):
-
-```sql
-alter table pipeline_runs add column if not exists mockup_style text not null default 'light'
-  check (mockup_style in ('light', 'dark'));
-```
+A dark "man cave" mockup room style was built alongside the default light
+one — `lib/mockupStyle.ts` and the `CANVA_MOCKUP_TEMPLATE_ID_DARK*` env vars
+still exist — but it's currently shelved: `lib/pipeline.ts` hardcodes
+`mockupStyle` to `"light"` rather than calling `pickMockupStyle()`, so every
+design uses the light templates regardless of `PIPELINE_DARK_MOCKUP_PROBABILITY`.
+Revert that one line to pick it back up if the dark room style is wanted again.
 
 ## Printify pricing
 
@@ -136,6 +123,19 @@ against your account's real provider rates. So `lib/printify.ts` creates the
 product with placeholder pricing, reads the real cost back from that same
 response, computes the margin-based price per variant, and updates the
 product with those prices before publishing it.
+
+## Printify size selection
+
+Only size variants matching the generated image's aspect ratio are enabled
+per listing — not just its broad vertical/horizontal orientation. A 4:3
+landscape image gets sizes like `12x9`, `16x12`, `24x18`, `32x24` (exact or
+near-exact multiples of 4:3), not every landscape size Printify offers,
+since a size with a meaningfully different ratio would visibly crop or pad
+the art. `lib/printify.ts`'s `ASPECT_RATIO_TOLERANCE_TIERS` starts at a tight
+2% tolerance and widens step by step (5%, 8%, 15%, 25%) until at least
+`PRINTIFY_MIN_SIZE_OPTIONS` (default `4`) sizes match, so a listing always
+has a reasonable size selection even if very few sizes are an exact match —
+it just prefers the closest ones available.
 
 ## Setup
 
@@ -288,7 +288,7 @@ you need to set in Vercel:
 | `PIPELINE_ENABLED` | Must be `true` for the run route to do anything; keep `false` until Etsy/Printify are configured |
 | `PIPELINE_ENABLE_DIGITAL`, `PIPELINE_ENABLE_PHYSICAL` | Which listing branch(es) to publish per design (both default `true`) |
 | `PIPELINE_LANDSCAPE_PROBABILITY` | Fraction (0-1) of designs picked landscape vs. portrait (default `0.5`) — see "Orientation" above |
-| `PIPELINE_DARK_MOCKUP_PROBABILITY` | Fraction (0-1) of designs picked dark "man cave" mockup style (default `0.3`) — see "Mockup room style" above |
+| `PIPELINE_DARK_MOCKUP_PROBABILITY` | Currently unused — dark mockup style is hardcoded off, see "Mockup room style" above |
 | `ANTHROPIC_API_KEY` | Claude API |
 | `CLAUDE_MODEL` | Defaults to `claude-sonnet-4-6` |
 | `RECRAFT_API_KEY` | Recraft image generation |
@@ -313,6 +313,7 @@ you need to set in Vercel:
 | `PRINTIFY_POSTER_BLUEPRINT_ID`, `PRINTIFY_POSTER_PRINT_PROVIDER_ID` | Poster product catalog IDs |
 | `PRINTIFY_CANVAS_BLUEPRINT_ID`, `PRINTIFY_CANVAS_PRINT_PROVIDER_ID` | Canvas product catalog IDs |
 | `PRINTIFY_PROFIT_MARGIN` | Target profit margin applied to every variant's real cost (default `0.30`) — see "Printify pricing" above |
+| `PRINTIFY_MIN_SIZE_OPTIONS` | Minimum size options to guarantee per listing before widening aspect-ratio match tolerance (default `4`) — see "Printify size selection" above |
 | `PRINTIFY_DEFAULT_PRICE_CENTS` | Fallback price only, if Printify's response is ever missing a variant's cost |
 | `PRINTIFY_SHIRT_BLUEPRINT_ID`, `PRINTIFY_SHIRT_PRINT_PROVIDER_ID` | Optional — set to also create a t-shirt product per design |
 | `PRINTIFY_SHIRT_IMAGE_SCALE` | Shirt-specific art scale (tune after checking a preview — see `.env.example`) |

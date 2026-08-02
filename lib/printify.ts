@@ -55,12 +55,22 @@ function parseVariantSizeInches(title: string): { width: number; height: number 
   return { width: Number(match[1]), height: Number(match[2]) };
 }
 
+// Widening relative-tolerance tiers for how far a variant's aspect ratio may
+// stray from the generated image's before it's excluded. A 4:3 image should
+// prefer exact multiples of 4:3 (12x9, 16x12, 24x18, ...) over, say, a 5x4
+// size that would visibly crop/pad it — but a shop needs more than one or
+// two exact-match sizes to look like a real listing, so the tolerance widens
+// step by step until PRINTIFY_MIN_SIZE_OPTIONS is met.
+const ASPECT_RATIO_TOLERANCE_TIERS = [0.02, 0.05, 0.08, 0.15, 0.25];
+
 /**
- * Picks the variant IDs matching the generated image's orientation, so a
- * portrait design only enables portrait canvas/poster sizes instead of
- * every size including ones that would badly crop or stretch it. Falls back
- * to every variant if the blueprint has no parseable WxH-sized variants
- * (apparel) or if filtering would otherwise leave nothing enabled.
+ * Picks the variant IDs matching the generated image's aspect ratio, so a
+ * design only enables sizes that are exact (or near-exact) multiples of its
+ * own proportions instead of every size sharing its broad orientation —
+ * e.g. a 4:3 image gets 12x9/16x12/24x18/32x24 but not a 5x4-ratio size that
+ * would crop or pad it. Falls back to every variant if the blueprint has no
+ * parseable WxH-sized variants (apparel), and falls back to the full
+ * orientation-matched set if ratio filtering can't reach the minimum count.
  */
 async function getMatchingVariantIds(
   blueprintId: number,
@@ -81,9 +91,24 @@ async function getMatchingVariantIds(
   }
 
   const targetOrientation = imageOrientation(imageWidth, imageHeight);
-  const matched = sized.filter((v) => imageOrientation(v.size.width, v.size.height) === targetOrientation);
+  const sameOrientation = sized.filter((v) => imageOrientation(v.size.width, v.size.height) === targetOrientation);
 
-  return (matched.length > 0 ? matched : sized).map((v) => v.id);
+  if (sameOrientation.length === 0) {
+    return sized.map((v) => v.id);
+  }
+
+  const targetRatio = imageWidth / imageHeight;
+  const ratioDiff = (size: { width: number; height: number }) => Math.abs(size.width / size.height - targetRatio) / targetRatio;
+
+  const minOptions = getEnvInt("PRINTIFY_MIN_SIZE_OPTIONS", 4);
+  for (const tolerance of ASPECT_RATIO_TOLERANCE_TIERS) {
+    const matched = sameOrientation.filter((v) => ratioDiff(v.size) <= tolerance);
+    if (matched.length >= minOptions) {
+      return matched.map((v) => v.id);
+    }
+  }
+
+  return sameOrientation.map((v) => v.id);
 }
 
 /**
@@ -183,10 +208,11 @@ type BlueprintConfig = {
 /**
  * Creates and publishes a poster product and/or a canvas product from the
  * same upscaled image (each gated behind PRINTIFY_ENABLE_POSTER /
- * PRINTIFY_ENABLE_CANVAS, both default true). Only the size variants whose
- * orientation (vertical/horizontal/square) matches the generated image are
- * enabled — a portrait design won't get landscape or square sizes enabled,
- * since those would crop or stretch it badly. Every variant is priced at
+ * PRINTIFY_ENABLE_CANVAS, both default true). Only size variants matching
+ * the generated image's aspect ratio (or close to it — see
+ * ASPECT_RATIO_TOLERANCE_TIERS / PRINTIFY_MIN_SIZE_OPTIONS above) are
+ * enabled, so a 4:3 image gets sizes like 12x9/16x12/24x18 rather than every
+ * size sharing its broad vertical/horizontal orientation. Every variant is priced at
  * PRINTIFY_PROFIT_MARGIN (default 30%) over its actual Printify cost, not a
  * flat price — a flat price loses money on larger sizes, which cost far more
  * to produce than small ones. All publish through Printify's native Etsy

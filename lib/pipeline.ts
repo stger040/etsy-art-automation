@@ -3,7 +3,7 @@ import { getEnvBool } from "./env";
 import { runStep, logStepError } from "./logger";
 import { pickNextNiche } from "./niches";
 import { pickOrientation } from "./orientation";
-import { pickMockupStyle } from "./mockupStyle";
+import type { MockupStyle } from "./mockupStyle";
 import { generateListing, checkImageCompliance } from "./claude";
 import { generateImage as recraftGenerateImage } from "./recraft";
 import { upscaleImage } from "./replicate";
@@ -54,7 +54,10 @@ export type RunOutcome = "completed" | "rejected" | "failed";
 export async function processOneRun(batchId: string): Promise<RunOutcome> {
   const niche = await pickNextNiche();
   const orientation = pickOrientation();
-  const mockupStyle = pickMockupStyle();
+  // Dark "man cave" mockups were tried and shelved — always light for now.
+  // The dark templates/env vars are left in place in lib/canva.ts in case
+  // this gets revisited later.
+  const mockupStyle: MockupStyle = "light";
 
   const [{ id: runId }] = await query<{ id: string }>(
     `insert into pipeline_runs (batch_id, niche_id, status, orientation, mockup_style) values ($1, $2, 'generating_theme', $3, $4) returning id`,
