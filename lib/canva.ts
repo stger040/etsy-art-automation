@@ -2,6 +2,7 @@ import { getEnv, requireEnv } from "./env";
 import { getValidAccessToken } from "./oauth-store";
 import { fetchImageBuffer } from "./image";
 import type { Orientation } from "./orientation";
+import type { MockupStyle } from "./mockupStyle";
 
 const API_BASE = "https://api.canva.com/rest/v1";
 const POLL_INTERVAL_MS = 2000;
@@ -95,12 +96,21 @@ async function pollJob<TResult>(path: string): Promise<TResult> {
   }
 }
 
+// Four templates cover every orientation x room-style combination. A
+// portrait-framed template would badly crop/stretch a landscape image, and a
+// light-room template would look wrong autofilled for a "dark mockup" pick,
+// so both dimensions need their own template.
+const TEMPLATE_ENV_VAR: Record<MockupStyle, Record<Orientation, string>> = {
+  light: { vertical: "CANVA_MOCKUP_TEMPLATE_ID", horizontal: "CANVA_MOCKUP_TEMPLATE_ID_HORIZONTAL" },
+  dark: { vertical: "CANVA_MOCKUP_TEMPLATE_ID_DARK", horizontal: "CANVA_MOCKUP_TEMPLATE_ID_DARK_HORIZONTAL" },
+};
+
 /**
  * Autofills the configured mockup brand template with the art image, then
  * exports the result as a flat PNG mockup. Returns the design id (for
- * reference) and the exported mockup image URL. Uses CANVA_MOCKUP_TEMPLATE_ID
- * for a portrait design, CANVA_MOCKUP_TEMPLATE_ID_HORIZONTAL for a landscape
- * one — a portrait-framed template would badly crop/stretch a landscape image.
+ * reference) and the exported mockup image URL. Which of the four templates
+ * gets used depends on the design's orientation and mockup style (see
+ * TEMPLATE_ENV_VAR above).
  *
  * Assumes the brand template has an image field named per CANVA_IMAGE_FIELD
  * (default "image") — check this with `get-brand-template-dataset` /
@@ -109,12 +119,10 @@ async function pollJob<TResult>(path: string): Promise<TResult> {
 export async function createMockup(
   imageUrl: string,
   runId: string,
-  orientation: Orientation = "vertical"
+  orientation: Orientation = "vertical",
+  mockupStyle: MockupStyle = "light"
 ): Promise<{ designId: string; mockupUrl: string }> {
-  const templateId =
-    orientation === "horizontal"
-      ? requireEnv("CANVA_MOCKUP_TEMPLATE_ID_HORIZONTAL")
-      : requireEnv("CANVA_MOCKUP_TEMPLATE_ID");
+  const templateId = requireEnv(TEMPLATE_ENV_VAR[mockupStyle][orientation]);
   const imageFieldName = getEnv("CANVA_IMAGE_FIELD_NAME", "image");
 
   const assetId = await uploadAsset(imageUrl, `pipeline-run-${runId}`);

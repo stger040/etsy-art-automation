@@ -44,6 +44,7 @@ export type PipelineRun = {
   image_width: number | null;
   image_height: number | null;
   orientation: "vertical" | "horizontal";
+  mockup_style: "light" | "dark";
   compliance_status: "pending" | "approved" | "rejected";
   compliance_reason: string | null;
   listing_types: ListingTypes;

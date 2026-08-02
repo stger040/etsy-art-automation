@@ -3,6 +3,7 @@ import { getEnvBool } from "./env";
 import { runStep, logStepError } from "./logger";
 import { pickNextNiche } from "./niches";
 import { pickOrientation } from "./orientation";
+import { pickMockupStyle } from "./mockupStyle";
 import { generateListing, checkImageCompliance } from "./claude";
 import { generateImage as recraftGenerateImage } from "./recraft";
 import { upscaleImage } from "./replicate";
@@ -53,10 +54,11 @@ export type RunOutcome = "completed" | "rejected" | "failed";
 export async function processOneRun(batchId: string): Promise<RunOutcome> {
   const niche = await pickNextNiche();
   const orientation = pickOrientation();
+  const mockupStyle = pickMockupStyle();
 
   const [{ id: runId }] = await query<{ id: string }>(
-    `insert into pipeline_runs (batch_id, niche_id, status, orientation) values ($1, $2, 'generating_theme', $3) returning id`,
-    [batchId, niche.id || null, orientation]
+    `insert into pipeline_runs (batch_id, niche_id, status, orientation, mockup_style) values ($1, $2, 'generating_theme', $3, $4) returning id`,
+    [batchId, niche.id || null, orientation, mockupStyle]
   );
 
   const ctx = { runId, batchId };
@@ -132,7 +134,7 @@ export async function processOneRun(batchId: string): Promise<RunOutcome> {
 
   if (getEnvBool("PIPELINE_ENABLE_DIGITAL", true)) {
     await setStatus(runId, "publishing_digital");
-    const mockup = await runStep("canva_mockup", ctx, () => createMockup(blobUrl, runId, orientation));
+    const mockup = await runStep("canva_mockup", ctx, () => createMockup(blobUrl, runId, orientation, mockupStyle));
     const listingImageUrl = mockup?.mockupUrl ?? blobUrl;
 
     const etsyListing = await runStep("etsy_create_draft_listing", ctx, () =>

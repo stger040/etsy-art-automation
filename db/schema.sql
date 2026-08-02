@@ -67,6 +67,9 @@ create table if not exists pipeline_runs (
   -- Picked randomly per design (lib/orientation.ts) for a mix of portrait
   -- and landscape canvas/poster listings.
   orientation text not null default 'vertical' check (orientation in ('vertical', 'horizontal')),
+  -- Picked randomly per design (lib/mockupStyle.ts) for a mix of light and
+  -- dark ("man cave") Canva mockup room styles.
+  mockup_style text not null default 'light' check (mockup_style in ('light', 'dark')),
 
   -- Compliance check
   compliance_status text not null default 'pending'
@@ -120,6 +123,11 @@ alter table pipeline_runs add column if not exists physical_etsy_description tex
 -- shop ends up with a mix of portrait and landscape canvas/poster listings.
 alter table pipeline_runs add column if not exists orientation text not null default 'vertical'
   check (orientation in ('vertical', 'horizontal'));
+
+-- Mockup room style is picked randomly per design (see lib/mockupStyle.ts)
+-- for a mix of light and dark ("man cave") Canva mockup room styles.
+alter table pipeline_runs add column if not exists mockup_style text not null default 'light'
+  check (mockup_style in ('light', 'dark'));
 
 create index if not exists idx_pipeline_runs_batch_id on pipeline_runs(batch_id);
 create index if not exists idx_pipeline_runs_status on pipeline_runs(status);

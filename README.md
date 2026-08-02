@@ -91,16 +91,37 @@ through the whole pipeline:
   width/height and only enables the matching vertical/horizontal size
   variants — no change needed there, it just now actually receives landscape
   images sometimes.
-- **Canva** (`lib/canva.ts`) autofills `CANVA_MOCKUP_TEMPLATE_ID` (portrait)
-  or `CANVA_MOCKUP_TEMPLATE_ID_HORIZONTAL` (landscape) — a portrait-framed
-  mockup would badly crop/stretch a landscape image, so you need a second
-  brand template built the same way as the first, just landscape.
+- **Canva** (`lib/canva.ts`) autofills whichever of the four templates below
+  matches both the orientation and the mockup style (see next section) — a
+  portrait-framed mockup would badly crop/stretch a landscape image.
 
 Migration for existing databases (idempotent, safe to re-run):
 
 ```sql
 alter table pipeline_runs add column if not exists orientation text not null default 'vertical'
   check (orientation in ('vertical', 'horizontal'));
+```
+
+## Mockup room style (light vs. dark "man cave")
+
+Independently of orientation, each design also randomly gets a `light` or
+`dark` mockup room style (`lib/mockupStyle.ts`,
+`PIPELINE_DARK_MOCKUP_PROBABILITY`, default `0.3` — dark stays a minority
+style), stored on `pipeline_runs.mockup_style`. This only changes which Canva
+mockup gets autofilled — a light neutral room, or a dark moody "man cave"
+room — the art, pricing, and listing copy are unaffected. Combined with
+orientation, this means four Canva brand templates total:
+
+| | Portrait | Landscape |
+|---|---|---|
+| Light | `CANVA_MOCKUP_TEMPLATE_ID` | `CANVA_MOCKUP_TEMPLATE_ID_HORIZONTAL` |
+| Dark | `CANVA_MOCKUP_TEMPLATE_ID_DARK` | `CANVA_MOCKUP_TEMPLATE_ID_DARK_HORIZONTAL` |
+
+Migration for existing databases (idempotent, safe to re-run):
+
+```sql
+alter table pipeline_runs add column if not exists mockup_style text not null default 'light'
+  check (mockup_style in ('light', 'dark'));
 ```
 
 ## Printify pricing
@@ -175,11 +196,12 @@ var — this project does not automate account/app creation:
      copy it into `CANVA_REFRESH_TOKEN` in Vercel and redeploy. (This
      handles the PKCE code exchange for you; see
      `app/api/canva/authorize` and `app/api/canva/callback`.)
-  7. Have two brand templates ready for the mockup — one portrait
-     (`CANVA_MOCKUP_TEMPLATE_ID`), one landscape
-     (`CANVA_MOCKUP_TEMPLATE_ID_HORIZONTAL`) — since designs are picked at
-     random between the two orientations. Confirm both have an autofill image
-     field matching `CANVA_IMAGE_FIELD_NAME`.
+  7. Have four brand templates ready for the mockup — every combination of
+     portrait/landscape and light/dark room style (`CANVA_MOCKUP_TEMPLATE_ID`,
+     `CANVA_MOCKUP_TEMPLATE_ID_HORIZONTAL`, `CANVA_MOCKUP_TEMPLATE_ID_DARK`,
+     `CANVA_MOCKUP_TEMPLATE_ID_DARK_HORIZONTAL`) — since designs are picked at
+     random on both axes. Confirm all four have an autofill image field
+     matching `CANVA_IMAGE_FIELD_NAME`.
 - **Etsy Open API v3** — register an app, complete OAuth once yourself to get
   an access/refresh token pair. Refresh tokens rotate on every use; this app
   persists the current pair in the `oauth_tokens` Postgres table after first
@@ -266,6 +288,7 @@ you need to set in Vercel:
 | `PIPELINE_ENABLED` | Must be `true` for the run route to do anything; keep `false` until Etsy/Printify are configured |
 | `PIPELINE_ENABLE_DIGITAL`, `PIPELINE_ENABLE_PHYSICAL` | Which listing branch(es) to publish per design (both default `true`) |
 | `PIPELINE_LANDSCAPE_PROBABILITY` | Fraction (0-1) of designs picked landscape vs. portrait (default `0.5`) — see "Orientation" above |
+| `PIPELINE_DARK_MOCKUP_PROBABILITY` | Fraction (0-1) of designs picked dark "man cave" mockup style (default `0.3`) — see "Mockup room style" above |
 | `ANTHROPIC_API_KEY` | Claude API |
 | `CLAUDE_MODEL` | Defaults to `claude-sonnet-4-6` |
 | `RECRAFT_API_KEY` | Recraft image generation |
@@ -274,8 +297,10 @@ you need to set in Vercel:
 | `REPLICATE_MODEL`, `REPLICATE_MODEL_VERSION` | Optional overrides |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob |
 | `CANVA_CLIENT_ID`, `CANVA_CLIENT_SECRET`, `CANVA_REFRESH_TOKEN` | Canva Connect OAuth |
-| `CANVA_MOCKUP_TEMPLATE_ID` | Portrait brand template to autofill |
-| `CANVA_MOCKUP_TEMPLATE_ID_HORIZONTAL` | Landscape brand template to autofill |
+| `CANVA_MOCKUP_TEMPLATE_ID` | Light, portrait brand template to autofill |
+| `CANVA_MOCKUP_TEMPLATE_ID_HORIZONTAL` | Light, landscape brand template to autofill |
+| `CANVA_MOCKUP_TEMPLATE_ID_DARK` | Dark "man cave", portrait brand template to autofill |
+| `CANVA_MOCKUP_TEMPLATE_ID_DARK_HORIZONTAL` | Dark "man cave", landscape brand template to autofill |
 | `CANVA_IMAGE_FIELD_NAME` | Template's autofill image field name (default `image`) |
 | `ETSY_API_KEY` | Etsy app keystring (OAuth client id) |
 | `ETSY_ACCESS_TOKEN`, `ETSY_REFRESH_TOKEN` | Seed OAuth tokens (self-refreshing after) |

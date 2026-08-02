@@ -88,6 +88,7 @@ export default async function DashboardPage() {
             <th style={{ padding: 8 }}>Niche</th>
             <th style={{ padding: 8 }}>Theme</th>
             <th style={{ padding: 8 }}>Orientation</th>
+            <th style={{ padding: 8 }}>Mockup</th>
             <th style={{ padding: 8 }}>Status</th>
             <th style={{ padding: 8 }}>Listing types</th>
             <th style={{ padding: 8 }}>Etsy listing</th>
@@ -102,6 +103,7 @@ export default async function DashboardPage() {
               <td style={{ padding: 8 }}>{r.niche_name ?? "—"}</td>
               <td style={{ padding: 8 }}>{r.theme ?? "—"}</td>
               <td style={{ padding: 8 }}>{r.orientation}</td>
+              <td style={{ padding: 8 }}>{r.mockup_style}</td>
               <td style={{ padding: 8 }}>
                 <Badge status={r.status} />
               </td>
@@ -126,7 +128,7 @@ export default async function DashboardPage() {
           ))}
           {runs.length === 0 && (
             <tr>
-              <td style={{ padding: 8 }} colSpan={9}>
+              <td style={{ padding: 8 }} colSpan={10}>
                 No runs yet.
               </td>
             </tr>
