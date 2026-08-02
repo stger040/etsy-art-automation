@@ -41,20 +41,25 @@ function imageOrientation(width: number, height: number): Orientation {
 }
 
 // Printify variant titles for size-per-orientation blueprints (posters,
-// canvases) are labeled like `16" x 20" (Vertical) / 0.75''` — no suffix
-// means a square size. Blueprints without orientation-labeled variants at
-// all (e.g. apparel, sized S/M/L instead) aren't filtered.
-function variantOrientation(title: string): Orientation {
-  if (/\(vertical\)/i.test(title)) return "vertical";
-  if (/\(horizontal\)/i.test(title)) return "horizontal";
-  return "square";
+// canvases) are plain `<width>" x <height>"` strings, e.g. `11" x 14"`
+// (portrait) vs. `14" x 11"` (landscape) as two separate variants — there is
+// no "(Vertical)"/"(Horizontal)" label at all (confirmed via
+// /api/printify/discover against the real catalog: blueprint 97's variants
+// are titled like `14" x 11"`, `11" x 14"`, `14" x 14"`, etc). Orientation is
+// inferred from which number is larger. Blueprints without any parseable
+// "<number> x <number>" titles at all (e.g. apparel sized S/M/L) aren't
+// filtered.
+function parseVariantSizeInches(title: string): { width: number; height: number } | null {
+  const match = title.match(/(\d+(?:\.\d+)?)\D+(\d+(?:\.\d+)?)/);
+  if (!match) return null;
+  return { width: Number(match[1]), height: Number(match[2]) };
 }
 
 /**
  * Picks the variant IDs matching the generated image's orientation, so a
  * portrait design only enables portrait canvas/poster sizes instead of
  * every size including ones that would badly crop or stretch it. Falls back
- * to every variant if the blueprint has no orientation-labeled variants
+ * to every variant if the blueprint has no parseable WxH-sized variants
  * (apparel) or if filtering would otherwise leave nothing enabled.
  */
 async function getMatchingVariantIds(
@@ -67,15 +72,18 @@ async function getMatchingVariantIds(
     `/catalog/blueprints/${blueprintId}/print_providers/${printProviderId}/variants.json`
   )) as { variants: Array<{ id: number; title: string }> };
 
-  const hasOrientedVariants = data.variants.some((v) => /\((vertical|horizontal)\)/i.test(v.title));
-  if (!hasOrientedVariants) {
+  const sized = data.variants
+    .map((v) => ({ id: v.id, size: parseVariantSizeInches(v.title) }))
+    .filter((v): v is { id: number; size: { width: number; height: number } } => v.size !== null);
+
+  if (sized.length === 0) {
     return data.variants.map((v) => v.id);
   }
 
   const targetOrientation = imageOrientation(imageWidth, imageHeight);
-  const matched = data.variants.filter((v) => variantOrientation(v.title) === targetOrientation);
+  const matched = sized.filter((v) => imageOrientation(v.size.width, v.size.height) === targetOrientation);
 
-  return (matched.length > 0 ? matched : data.variants).map((v) => v.id);
+  return (matched.length > 0 ? matched : sized).map((v) => v.id);
 }
 
 /**
