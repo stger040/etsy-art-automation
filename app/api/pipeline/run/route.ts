@@ -75,7 +75,14 @@ async function handle(request: Request) {
     await finalizeBatch(batchId, { succeeded, rejected, failed });
   }
 
-  return NextResponse.json({ batchId, requested: listingsPerDay, succeeded, rejected, failed });
+  // See app/api/pipeline/status/route.ts for why this is set explicitly:
+  // force-dynamic alone doesn't stop a CDN/browser from caching this GET
+  // response, which previously showed the exact same stale batchId/counts
+  // on a second manual trigger instead of actually running again.
+  return NextResponse.json(
+    { batchId, requested: listingsPerDay, succeeded, rejected, failed },
+    { headers: { "Cache-Control": "no-store, max-age=0, must-revalidate" } }
+  );
 }
 
 export async function GET(request: Request) {
